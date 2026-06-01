@@ -1,0 +1,47 @@
+"""Role resolution & panel-user management (Module §2.3, §5 RBAC).
+
+Source of truth for "who can use the panel and as what role":
+  - env ``ADMIN_TELEGRAM_IDS`` → permanent ``admin`` (superadmins, never stored in DB),
+  - ``panel_users`` rows  → their stored role (currently only ``viewer``).
+Role is resolved fresh on every request, so removing a viewer revokes access immediately
+(not only when their token expires)."""
+from __future__ import annotations
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.config import settings
+from app.models import PanelUser
+
+ADMIN = "admin"
+VIEWER = "viewer"
+
+
+async def resolve_role(session: AsyncSession, telegram_id: int) -> str | None:
+    """Return the effective role for an ID, or None if it has no panel access."""
+    if telegram_id in settings.admin_telegram_ids:
+        return ADMIN
+    row = await session.get(PanelUser, telegram_id)
+    return row.role if row is not None else None
+
+
+async def list_viewers(session: AsyncSession) -> list[PanelUser]:
+    return list(
+        (await session.execute(select(PanelUser).order_by(PanelUser.created_at))).scalars().all()
+    )
+
+
+async def add_viewer(
+    session: AsyncSession, telegram_id: int, name: str | None, added_by: int
+) -> PanelUser:
+    user = PanelUser(telegram_id=telegram_id, role=VIEWER, name=name, added_by=added_by)
+    session.add(user)
+    return user
+
+
+async def remove_viewer(session: AsyncSession, telegram_id: int) -> bool:
+    user = await session.get(PanelUser, telegram_id)
+    if user is None:
+        return False
+    await session.delete(user)
+    return True

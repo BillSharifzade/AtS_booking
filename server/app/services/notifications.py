@@ -1,0 +1,114 @@
+from __future__ import annotations
+
+import logging
+
+from aiogram.exceptions import TelegramAPIError
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from app.config import settings
+from app.models import Booking, BookingStatus, Room
+from app.telegram import esc, get_bot, send_text
+
+log = logging.getLogger(__name__)
+
+
+async def request_feedback(booking: Booking) -> None:
+    """DM the customer a 1–5 rating request when their event completes (Module F).
+    The bot process handles the ``fb:`` callbacks and the optional follow-up comment."""
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=str(n), callback_data=f"fb:{booking.id}:{n}") for n in range(1, 6)]
+        ]
+    )
+    try:
+        await get_bot().send_message(
+            booking.customer_telegram_id,
+            f"Мероприятие №{booking.id} «{esc(booking.event_name)}» завершено. Спасибо!\n"
+            "Пожалуйста, оцените его от 1 до 5:",
+            reply_markup=kb,
+        )
+    except TelegramAPIError:
+        log.exception("feedback request failed for booking %s", booking.id)
+
+
+def _fmt_dt(dt) -> str:
+    return dt.strftime("%d.%m.%Y %H:%M")
+
+
+def _booking_card(booking: Booking, room: Room) -> str:
+    coffee = "да" if booking.coffee_break else "нет"
+    return (
+        f"<b>{esc(booking.event_name)}</b>\n"
+        f"Помещение: {esc(room.name)} (зона {esc(room.zone.name)})\n"
+        f"Когда: {_fmt_dt(booking.starts_at)} — {_fmt_dt(booking.ends_at)}\n"
+        f"Тип: {esc(booking.event_type)}\n"
+        f"Участников: {booking.attendees}\n"
+        f"Кофе-брейк: {coffee}"
+        + (f" ({booking.coffee_headcount} чел.)" if booking.coffee_break and booking.coffee_headcount else "")
+        + f"\nЗаказчик: {esc(booking.contact_name)}, {esc(booking.company)}\n"
+        f"Телефон: {esc(booking.phone)}\n"
+        f"#заявка_{booking.id}"
+    )
+
+
+async def notify_new(booking: Booking, room: Room) -> None:
+    customer_msg = (
+        "Заявка №{id} принята. Ожидайте подтверждения администратора.\n\n{card}".format(
+            id=booking.id, card=_booking_card(booking, room)
+        )
+    )
+    if booking.is_urgent:
+        customer_msg += "\n\n<i>Срочное бронирование (менее 2 дней). С вами свяжется администратор.</i>"
+    await send_text(booking.customer_telegram_id, customer_msg)
+
+    admin_msg = ("Новая заявка №{id}{urgent}\n\n{card}").format(
+        id=booking.id,
+        urgent=" (СРОЧНАЯ)" if booking.is_urgent else "",
+        card=_booking_card(booking, room),
+    )
+    for admin_id in settings.admin_telegram_ids:
+        await send_text(admin_id, admin_msg)
+
+
+async def notify_status_change(booking: Booking, room: Room, new_status: BookingStatus) -> None:
+    if new_status == BookingStatus.approved:
+        await send_text(
+            booking.customer_telegram_id,
+            f"Заявка №{booking.id} подтверждена.\n\n{_booking_card(booking, room)}",
+        )
+        await send_text(
+            settings.sat_bookings_group_chat_id,
+            f"Новое мероприятие\n\n{_booking_card(booking, room)}",
+        )
+    elif new_status == BookingStatus.rejected:
+        reason = f"\nПричина: {esc(booking.reject_reason)}" if booking.reject_reason else ""
+        await send_text(
+            booking.customer_telegram_id,
+            f"Заявка №{booking.id} отклонена.{reason}",
+        )
+    elif new_status == BookingStatus.completed:
+        await request_feedback(booking)
+
+
+async def notify_room_changed(booking: Booking, room: Room) -> None:
+    # Admin moved an already-approved booking to another room (Module E rebalancing).
+    await send_text(
+        booking.customer_telegram_id,
+        f"По заявке №{booking.id} изменено помещение.\n\n{_booking_card(booking, room)}",
+    )
+
+
+async def notify_reminder(booking: Booking, room: Room, scope: str) -> None:
+    # D-1 / H-1 reminders to the customer about the event they booked (Module D).
+    start = _fmt_dt(booking.starts_at)
+    if scope == "day":
+        head = f"Напоминание: завтра, {start}, начнётся ваше мероприятие «{esc(booking.event_name)}»."
+    else:
+        head = (
+            f"Напоминание: уже через час, в {booking.starts_at.strftime('%H:%M')}, "
+            f"начнётся ваше мероприятие «{esc(booking.event_name)}»."
+        )
+    await send_text(
+        booking.customer_telegram_id,
+        f"{head}\nВы забронировали:\n\n{_booking_card(booking, room)}",
+    )
