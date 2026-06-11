@@ -230,8 +230,8 @@ export const api = {
     ),
 
   listPanelUsers: () => request<PanelUser[]>("/panel-users"),
-  addPanelUser: (telegram_id: number, name: string | null) =>
-    request<PanelUser>("/panel-users", { method: "POST", body: JSON.stringify({ telegram_id, name }) }),
+  addPanelUser: (telegram_id: number, name: string | null, role: "admin" | "viewer") =>
+    request<PanelUser>("/panel-users", { method: "POST", body: JSON.stringify({ telegram_id, name, role }) }),
   removePanelUser: (telegram_id: number) =>
     request<void>(`/panel-users/${telegram_id}`, { method: "DELETE" }),
 

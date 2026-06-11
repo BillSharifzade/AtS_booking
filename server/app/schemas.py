@@ -1,4 +1,5 @@
 from datetime import date, datetime, time
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -227,6 +228,7 @@ class AuthToken(BaseModel):
 class PanelUserCreate(BaseModel):
     telegram_id: int
     name: str | None = Field(default=None, max_length=200)
+    role: Literal["admin", "viewer"] = "viewer"
 
 
 class PanelUserOut(BaseModel):

@@ -11,6 +11,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true);
   const [tgId, setTgId] = useState("");
   const [name, setName] = useState("");
+  const [role, setRole] = useState<"admin" | "viewer">("viewer");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,9 +24,10 @@ export default function UsersPage() {
     setBusy(true);
     setError(null);
     try {
-      await api.addPanelUser(id, name.trim() || null);
+      await api.addPanelUser(id, name.trim() || null, role);
       setTgId("");
       setName("");
+      setRole("viewer");
       await load();
     } catch (e) {
       setError((e as Error).message);
@@ -35,7 +37,7 @@ export default function UsersPage() {
   };
 
   const remove = async (id: number) => {
-    if (!confirm("Убрать доступ этому наблюдателю?")) return;
+    if (!confirm("Убрать доступ этому пользователю?")) return;
     setBusy(true);
     setError(null);
     try {
@@ -52,14 +54,15 @@ export default function UsersPage() {
     <div>
       <h2>Пользователи</h2>
       <p className="page-hint">
-        Наблюдатели (руководители подразделений) входят по своему Telegram ID и видят панель
-        <b> только для чтения</b> — дашборд, заявки, помещения, журнал. Администраторы задаются
-        переменной <code>ADMIN_TELEGRAM_IDS</code> и здесь не отображаются.
+        <b>Наблюдатели</b> (руководители подразделений) входят по своему Telegram ID и видят панель
+        только для чтения — дашборд, заявки, помещения, журнал. <b>Администраторы</b> имеют полный
+        доступ, включая управление пользователями. Базовые администраторы задаются переменной
+        <code>ADMIN_TELEGRAM_IDS</code> и здесь не отображаются.
       </p>
 
       <div className="card">
-        <h3>Добавить наблюдателя</h3>
-        <div className="row2">
+        <h3>Добавить пользователя</h3>
+        <div className="row3">
           <div className="field">
             <label>Telegram ID</label>
             <input
@@ -73,6 +76,13 @@ export default function UsersPage() {
             <label>Имя (необязательно)</label>
             <input value={name} onChange={(e) => setName(e.target.value)} placeholder="ФИО / подразделение" />
           </div>
+          <div className="field">
+            <label>Роль</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as "admin" | "viewer")}>
+              <option value="viewer">Наблюдатель (только чтение)</option>
+              <option value="admin">Администратор (полный доступ)</option>
+            </select>
+          </div>
         </div>
         <div className="actions">
           <button className="primary" onClick={add} disabled={busy || !tgId}>Добавить</button>
@@ -84,7 +94,7 @@ export default function UsersPage() {
       {loading ? (
         <TableSkeleton cols={4} rows={3} />
       ) : users.length === 0 ? (
-        <div className="empty">Наблюдателей нет. Добавьте первого выше.</div>
+        <div className="empty">Пользователей нет. Добавьте первого выше.</div>
       ) : (
         <table>
           <thead>
@@ -95,7 +105,11 @@ export default function UsersPage() {
               <tr key={u.telegram_id}>
                 <td>{u.telegram_id}</td>
                 <td>{u.name || "—"}</td>
-                <td><span className="badge zone">наблюдатель</span></td>
+                <td>
+                  {u.role === "admin"
+                    ? <span className="badge zone">администратор</span>
+                    : <span className="badge completed">наблюдатель</span>}
+                </td>
                 <td>{fmt(u.created_at)}</td>
                 <td style={{ textAlign: "right" }}>
                   <button className="danger" disabled={busy} onClick={() => remove(u.telegram_id)}>Убрать</button>
