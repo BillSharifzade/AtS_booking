@@ -26,7 +26,7 @@ async def resolve_role(session: AsyncSession, telegram_id: int) -> str | None:
     return row.role if row is not None else None
 
 
-async def list_panel_users(session: AsyncSession) -> list[PanelUser]:
+async def get_panel_users(session: AsyncSession) -> list[PanelUser]:
     return list(
         (await session.execute(select(PanelUser).order_by(PanelUser.created_at))).scalars().all()
     )

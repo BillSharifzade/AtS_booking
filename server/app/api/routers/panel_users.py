@@ -7,7 +7,7 @@ from app.db import get_session
 from app.schemas import PanelUserCreate, PanelUserOut
 from app.services.access import (
     add_panel_user,
-    list_panel_users,
+    get_panel_users,
     remove_panel_user,
     resolve_role,
 )
@@ -22,7 +22,7 @@ async def list_panel_users(
     _: int = Depends(current_admin),
     session: AsyncSession = Depends(get_session),
 ):
-    return await list_panel_users(session)
+    return await get_panel_users(session)
 
 
 @router.post("", response_model=PanelUserOut, status_code=201)

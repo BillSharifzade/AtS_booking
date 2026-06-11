@@ -68,7 +68,7 @@ export default function UsersPage() {
             <input
               value={tgId}
               inputMode="numeric"
-              placeholder="например, 1320166360"
+              placeholder="например, 123456789"
               onChange={(e) => setTgId(e.target.value.replace(/[^0-9]/g, ""))}
             />
           </div>
