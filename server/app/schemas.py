@@ -57,6 +57,7 @@ class RoomCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     zone_id: int
     capacity: int = Field(gt=0)
+    meter_squared: int | None = Field(default=None, ge=0)
     open_time: time
     close_time: time
     notes: str | None = None
@@ -68,6 +69,7 @@ class RoomUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     zone_id: int | None = None
     capacity: int | None = Field(default=None, gt=0)
+    meter_squared: int | None = Field(default=None, ge=0)
     open_time: time | None = None
     close_time: time | None = None
     notes: str | None = None
@@ -82,6 +84,7 @@ class RoomOut(BaseModel):
     zone_id: int
     zone_name: str
     capacity: int
+    meter_squared: int | None
     open_time: time
     close_time: time
     is_active: bool
@@ -89,11 +92,22 @@ class RoomOut(BaseModel):
     notes: str | None
 
 
+# Seating arrangements ("Расстановка"). Stored as plain strings on Booking so a future
+# dynamic layout builder can add custom keys without a schema change.
+ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
+
+
+class PropRequest(BaseModel):
+    prop_id: int
+    amount: int = Field(gt=0)
+
+
 class BookingCreate(BaseModel):
     # Provide either zone_id (system assigns a free room) or an explicit room_id.
     zone_id: int | None = None
     room_id: int | None = None
     company: str
+    company_id: int | None = None
     contact_name: str
     phone: str
     customer_telegram_id: int
@@ -102,11 +116,13 @@ class BookingCreate(BaseModel):
     event_name: str
     description: str | None = None
     attendees: int = Field(gt=0)
+    room_struct: str | None = None
     coffee_break: bool = False
     coffee_headcount: int | None = Field(default=None, ge=0)
     is_urgent: bool = False
     starts_at: datetime
     ends_at: datetime
+    props: list[PropRequest] = []
 
 
 class BookingOut(BaseModel):
@@ -118,10 +134,12 @@ class BookingOut(BaseModel):
     phone: str
     customer_telegram_id: int
     customer_username: str | None
+    company_id: int | None
     event_type: str
     event_name: str
     description: str | None
     attendees: int
+    room_struct: str | None
     coffee_break: bool
     coffee_headcount: int | None
     coffee_status: str
@@ -150,14 +168,40 @@ class StatusHistoryOut(BaseModel):
 class FeedbackOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     rating: int
+    room_rating: int | None
+    service_rating: int | None
+    props_rating: int | None
     comment: str | None
     created_at: datetime
+
+
+class BookingChecklistItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    text: str
+    done: bool
+    sort_order: int
+
+
+class BookingChecklistToggle(BaseModel):
+    done: bool
+
+
+class BookingPropOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    prop_id: int
+    name: str
+    amount: int
+    unit: str | None
+    kind: str
 
 
 class BookingWithRoom(BookingOut):
     room: RoomOut
     status_history: list[StatusHistoryOut] = []
     feedback: FeedbackOut | None = None
+    checklist: list[BookingChecklistItemOut] = []
+    props: list[BookingPropOut] = []
 
 
 class ReassignIn(BaseModel):
@@ -323,6 +367,11 @@ class UpcomingItem(BaseModel):
     is_urgent: bool
 
 
+class CompanyStat(BaseModel):
+    company: str
+    count: int
+
+
 class DashboardSummary(BaseModel):
     date_from: date | None
     date_to: date | None
@@ -334,6 +383,219 @@ class DashboardSummary(BaseModel):
     coffee_headcount: int
     avg_rating: float | None
     feedback_count: int
+    avg_room_rating: float | None = None
+    avg_service_rating: float | None = None
+    avg_props_rating: float | None = None
+    completion_rate: float | None = None
+    approval_rate: float | None = None
+    avg_lead_hours: float | None = None
+    active_rooms: int = 0
+    active_companies: int = 0
     by_zone: list[ZoneStat]
     top_rooms: list[RoomStat]
+    top_companies: list[CompanyStat] = []
+    by_struct: dict[str, int] = {}
     upcoming: list[UpcomingItem]
+
+
+# ----- Companies (#4) -----
+class CompanyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    website_url: str | None = Field(default=None, max_length=300)
+    is_active: bool = True
+    # Optional inline logo (base64), picked via the image picker.
+    logo_content_type: str | None = Field(default=None, pattern=r"^image/(png|jpeg|jpg|webp|gif|svg\+xml)$")
+    logo_data: str | None = None  # base64
+
+
+class CompanyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    website_url: str | None = Field(default=None, max_length=300)
+    is_active: bool | None = None
+    logo_content_type: str | None = Field(default=None, pattern=r"^image/(png|jpeg|jpg|webp|gif|svg\+xml)$")
+    logo_data: str | None = None  # base64; pass "" to clear
+
+
+class CompanyOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    website_url: str | None
+    is_active: bool
+    has_logo: bool
+    created_at: datetime
+
+
+# ----- Props / Оборудование (#6) -----
+PROP_KINDS = {"tech", "office"}
+
+
+class PropCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    kind: Literal["tech", "office"] = "tech"
+    unit: str | None = Field(default=None, max_length=40)
+    amount: int = Field(default=0, ge=0)
+    description: str | None = None
+    is_active: bool = True
+
+
+class PropUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    kind: Literal["tech", "office"] | None = None
+    unit: str | None = Field(default=None, max_length=40)
+    amount: int | None = Field(default=None, ge=0)
+    description: str | None = None
+    is_active: bool | None = None
+
+
+class PropOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    kind: str
+    unit: str | None
+    amount: int
+    description: str | None
+    is_active: bool
+    created_at: datetime
+
+
+# ----- Checklist template (#7) -----
+class ChecklistItemCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+
+
+class ChecklistItemUpdate(BaseModel):
+    text: str | None = Field(default=None, min_length=1, max_length=300)
+    sort_order: int | None = None
+
+
+class ChecklistItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    text: str
+    sort_order: int
+
+
+# ----- Off-time scheduler (#8) -----
+class OfftimeCreate(BaseModel):
+    room_id: int
+    starts_at: datetime
+    ends_at: datetime
+    reason: str = Field(min_length=1, max_length=160)
+    description: str | None = None
+
+
+class OfftimeUpdate(BaseModel):
+    room_id: int | None = None
+    starts_at: datetime | None = None
+    ends_at: datetime | None = None
+    reason: str | None = Field(default=None, min_length=1, max_length=160)
+    description: str | None = None
+
+
+class OfftimeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    room_id: int
+    room_name: str
+    starts_at: datetime
+    ends_at: datetime
+    reason: str
+    description: str | None
+    created_at: datetime
+
+
+# ----- Articles / База знаний (#10) -----
+class ArticleCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    category: str = Field(min_length=1, max_length=60)
+    body: str = Field(min_length=1)
+
+
+class ArticleUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    category: str | None = Field(default=None, min_length=1, max_length=60)
+    body: str | None = Field(default=None, min_length=1)
+
+
+class ArticleOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    category: str
+    body: str
+    created_at: datetime
+    updated_at: datetime
+
+
+# ----- Reviews (#12) -----
+class FeedbackCreate(BaseModel):
+    rating: int = Field(ge=1, le=5)
+    room_rating: int | None = Field(default=None, ge=1, le=5)
+    service_rating: int | None = Field(default=None, ge=1, le=5)
+    props_rating: int | None = Field(default=None, ge=1, le=5)
+    comment: str | None = None
+
+
+# ----- Client Telegram Mini App (#13) -----
+class ClientUser(BaseModel):
+    telegram_id: int
+    name: str | None = None
+    username: str | None = None
+
+
+class ClientBootstrap(BaseModel):
+    user: ClientUser
+    companies: list[CompanyOut]
+    zones: list[ZoneOut]
+    props: list[PropOut]
+
+
+class ClientBookingCreate(BaseModel):
+    zone_id: int
+    company_id: int | None = None
+    company: str = Field(min_length=1, max_length=200)
+    contact_name: str = Field(min_length=1, max_length=200)
+    phone: str = Field(min_length=1, max_length=40)
+    event_type: str = Field(min_length=1, max_length=100)
+    event_name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    attendees: int = Field(gt=0)
+    room_struct: str | None = None
+    coffee_break: bool = False
+    coffee_headcount: int | None = Field(default=None, ge=0)
+    is_urgent: bool = False
+    starts_at: datetime
+    ends_at: datetime
+    props: list[PropRequest] = []
+
+
+class ClientBookingOut(BaseModel):
+    """Compact booking view for the client's "my bookings" list."""
+    id: int
+    event_name: str
+    room: str
+    zone: str
+    starts_at: datetime
+    ends_at: datetime
+    attendees: int
+    status: BookingStatus
+    room_struct: str | None
+    has_feedback: bool
+
+
+class ReviewOut(BaseModel):
+    """Admin-facing review row: who/company/room/stars/comment."""
+    booking_id: int
+    event_name: str
+    company: str
+    room: str
+    zone: str
+    customer_telegram_id: int
+    rating: int
+    room_rating: int | None
+    service_rating: int | None
+    props_rating: int | None
+    comment: str | None
+    created_at: datetime

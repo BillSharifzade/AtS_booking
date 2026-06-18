@@ -51,6 +51,8 @@ class Room(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     zone_id: Mapped[int] = mapped_column(ForeignKey("zones.id"), nullable=False, index=True)
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Floor area in square metres (admin-entered, optional).
+    meter_squared: Mapped[int | None] = mapped_column(Integer)
     open_time: Mapped[time] = mapped_column(Time, nullable=False)
     close_time: Mapped[time] = mapped_column(Time, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -103,6 +105,9 @@ class Booking(Base):
     room_id: Mapped[int] = mapped_column(ForeignKey("rooms.id"), nullable=False)
 
     company: Mapped[str] = mapped_column(String(200), nullable=False)
+    # Optional link to a curated Company record (clients pick from the active list).
+    # The free-text `company` is kept as a denormalised label / legacy fallback.
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id"))
     contact_name: Mapped[str] = mapped_column(String(200), nullable=False)
     phone: Mapped[str] = mapped_column(String(40), nullable=False)
     customer_telegram_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
@@ -112,6 +117,10 @@ class Booking(Base):
     event_name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     attendees: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Seating arrangement ("Расстановка"): theatre / class / banquet / u_shaped.
+    # Stored as a plain string (not an enum) so a dynamic layout builder can
+    # introduce custom layout keys later without a schema migration.
+    room_struct: Mapped[str | None] = mapped_column(String(40))
 
     coffee_break: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     coffee_headcount: Mapped[int | None] = mapped_column(Integer)
@@ -146,11 +155,20 @@ class Booking(Base):
     # Two FKs point at rooms (event room + coffee room) → disambiguate with foreign_keys.
     room: Mapped[Room] = relationship(back_populates="bookings", foreign_keys=[room_id])
     coffee_room: Mapped[Room | None] = relationship(foreign_keys=[coffee_room_id])
+    company_ref: Mapped[Company | None] = relationship(lazy="selectin")
     status_history: Mapped[list[StatusHistory]] = relationship(
         back_populates="booking", cascade="all, delete-orphan", order_by="StatusHistory.created_at"
     )
     feedback: Mapped[Feedback | None] = relationship(
         back_populates="booking", uselist=False, cascade="all, delete-orphan"
+    )
+    checklist: Mapped[list[BookingChecklistItem]] = relationship(
+        back_populates="booking",
+        cascade="all, delete-orphan",
+        order_by="BookingChecklistItem.sort_order, BookingChecklistItem.id",
+    )
+    props: Mapped[list[BookingProp]] = relationship(
+        back_populates="booking", cascade="all, delete-orphan"
     )
 
 
@@ -240,7 +258,11 @@ class Feedback(Base):
     booking_id: Mapped[int] = mapped_column(
         ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, unique=True, index=True
     )
-    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..5
+    rating: Mapped[int] = mapped_column(Integer, nullable=False)  # 1..5 overall
+    # Per-aspect sub-ratings (1..5), optional so legacy single-rating feedback stays valid.
+    room_rating: Mapped[int | None] = mapped_column(Integer)
+    service_rating: Mapped[int | None] = mapped_column(Integer)
+    props_rating: Mapped[int | None] = mapped_column(Integer)
     comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -274,4 +296,132 @@ class ChatMessage(Base):
     text: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class Company(Base):
+    """Admin-curated company directory. Clients pick their company from the active
+    list when booking; the logo is stored inline (served via /companies/{id}/logo)."""
+
+    __tablename__ = "companies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
+    website_url: Mapped[str | None] = mapped_column(String(300))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    logo_content_type: Mapped[str | None] = mapped_column(String(60))
+    logo_data: Mapped[bytes | None] = mapped_column(LargeBinary)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    @property
+    def has_logo(self) -> bool:
+        return self.logo_data is not None
+
+
+class Prop(Base):
+    """Equipment / supplies inventory ("Оборудование"). Two kinds:
+    ``tech`` (countable units, e.g. projectors) and ``office`` (consumables with a
+    custom unit, e.g. "пачка" of A4 paper, "бутылка" of water)."""
+
+    __tablename__ = "props"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), default="tech", nullable=False)  # tech | office
+    # Free-text unit for office consumables (e.g. "пачка", "бутылка"). None ⇒ plain "шт.".
+    unit: Mapped[str | None] = mapped_column(String(40))
+    amount: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BookingProp(Base):
+    """Props requested for a specific booking, with the requested amount."""
+
+    __tablename__ = "booking_props"
+    __table_args__ = (UniqueConstraint("booking_id", "prop_id", name="uq_booking_prop"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    prop_id: Mapped[int] = mapped_column(ForeignKey("props.id", ondelete="CASCADE"), nullable=False)
+    amount: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+
+    booking: Mapped[Booking] = relationship(back_populates="props")
+    prop: Mapped[Prop] = relationship(lazy="selectin")
+
+    @property
+    def name(self) -> str:
+        return self.prop.name
+
+    @property
+    def unit(self) -> str | None:
+        return self.prop.unit
+
+    @property
+    def kind(self) -> str:
+        return self.prop.kind
+
+
+class ChecklistTemplateItem(Base):
+    """A single stage in the global room-preparation checklist template.
+    Copied onto every new booking as a BookingChecklistItem."""
+
+    __tablename__ = "checklist_template_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    text: Mapped[str] = mapped_column(String(300), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BookingChecklistItem(Base):
+    """Per-booking copy of a checklist stage; admins tick items as prep is done."""
+
+    __tablename__ = "booking_checklist_items"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    booking_id: Mapped[int] = mapped_column(
+        ForeignKey("bookings.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    text: Mapped[str] = mapped_column(String(300), nullable=False)
+    done: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    booking: Mapped[Booking] = relationship(back_populates="checklist")
+
+
+class RoomOfftime(Base):
+    """Admin-scheduled period during which a room is unavailable for booking
+    (maintenance, private hold, etc.). Enforced in availability/conflict checks."""
+
+    __tablename__ = "room_offtimes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    room_id: Mapped[int] = mapped_column(
+        ForeignKey("rooms.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    room: Mapped[Room] = relationship(lazy="selectin")
+
+
+class Article(Base):
+    """Knowledge-base article ("База знаний"). Category mirrors a panel module."""
+
+    __tablename__ = "articles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    category: Mapped[str] = mapped_column(String(60), nullable=False, default="general", index=True)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

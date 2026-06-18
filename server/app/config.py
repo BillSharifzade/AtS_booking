@@ -19,6 +19,11 @@ class Settings(BaseSettings):
 
     cors_origins_raw: str = Field(default="http://localhost:5173", alias="CORS_ORIGINS")
 
+    # Public HTTPS URL of the client Telegram Mini Web App (#13). When set, the bot
+    # exposes a "launch app" menu/inline button. Must be HTTPS (Telegram requirement);
+    # apex koinotinav.com is taken, so this lives at the dchr. subdomain.
+    miniapp_url: str = Field(default="", alias="MINIAPP_URL")
+
     @property
     def admin_telegram_ids(self) -> set[int]:
         return {int(x.strip()) for x in self.admin_telegram_ids_raw.split(",") if x.strip()}

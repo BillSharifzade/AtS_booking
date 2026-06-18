@@ -48,6 +48,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_TTL_HOURS: ${JWT_TTL_HOURS}
       LOGIN_CODE_TTL_SECONDS: ${LOGIN_CODE_TTL_SECONDS}
+      MINIAPP_URL: ${MINIAPP_URL:-}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     depends_on:
       db:
@@ -66,6 +67,23 @@ services:
       - "5173:5173"
     volumes:
       - ./frontend:/app
+      - /app/node_modules
+
+  # Client Telegram Mini Web App (#13). Dev server for local work. In production
+  # it is NOT run as a container — the existing host Nginx (serving
+  # dchr.koinotinav.com for another project) serves the built ./miniapp/dist under
+  # the /ats/ subpath and proxies /ats/api/ to the api service. Build with:
+  #   docker compose run --rm miniapp npm run build
+  # See deploy/nginx-ats.conf for the location blocks to add to that Nginx site.
+  miniapp:
+    build: ./miniapp
+    command: npm run dev -- --host 0.0.0.0 --port 5174
+    environment:
+      VITE_API_BASE_URL: ${MINIAPP_API_BASE_URL:-${VITE_API_BASE_URL}}
+    ports:
+      - "5174:5174"
+    volumes:
+      - ./miniapp:/app
       - /app/node_modules
 
 volumes:

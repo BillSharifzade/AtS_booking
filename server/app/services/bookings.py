@@ -6,14 +6,76 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import AuditLog, Booking, BookingStatus, Room, StatusHistory
+from app.models import (
+    AuditLog,
+    Booking,
+    BookingChecklistItem,
+    BookingProp,
+    BookingStatus,
+    ChecklistTemplateItem,
+    Prop,
+    RoomOfftime,
+    Room,
+    StatusHistory,
+)
 
 
 URGENT_THRESHOLD = timedelta(days=2)
 
+# Valid seating arrangements ("Расстановка"). Kept as a plain set so a future dynamic
+# layout builder can extend it. Mirrors schemas.ROOM_STRUCTS.
+ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
+
+# Statuses that "hold" a resource (room slot / prop stock).
+ACTIVE_STATUSES = [BookingStatus.new, BookingStatus.processing, BookingStatus.approved]
+
 
 class BookingError(Exception):
     pass
+
+
+async def has_offtime(
+    session: AsyncSession, room_id: int, starts_at: datetime, ends_at: datetime
+) -> RoomOfftime | None:
+    """Scheduled-unavailability overlap for a room (Module: off-time scheduler)."""
+    stmt = select(RoomOfftime).where(
+        RoomOfftime.room_id == room_id,
+        RoomOfftime.starts_at < ends_at,
+        RoomOfftime.ends_at > starts_at,
+    )
+    return (await session.execute(stmt)).scalars().first()
+
+
+async def validate_props(
+    session: AsyncSession,
+    requested: list[tuple[int, int]],
+    *,
+    exclude_booking_id: int | None = None,
+) -> list[tuple[Prop, int]]:
+    """Validate a list of (prop_id, amount) against simple global stock: a prop's
+    `amount` must cover everything committed by active bookings plus this request.
+    Returns the resolved (Prop, amount) pairs or raises BookingError."""
+    resolved: list[tuple[Prop, int]] = []
+    for prop_id, amount in requested:
+        prop = await session.get(Prop, prop_id)
+        if prop is None or not prop.is_active:
+            raise BookingError("Выбранное оборудование недоступно.")
+        committed_stmt = (
+            select(func.coalesce(func.sum(BookingProp.amount), 0))
+            .join(Booking, Booking.id == BookingProp.booking_id)
+            .where(BookingProp.prop_id == prop_id, Booking.status.in_(ACTIVE_STATUSES))
+        )
+        if exclude_booking_id is not None:
+            committed_stmt = committed_stmt.where(Booking.id != exclude_booking_id)
+        committed = (await session.execute(committed_stmt)).scalar_one()
+        if committed + amount > prop.amount:
+            available = max(prop.amount - committed, 0)
+            unit = prop.unit or "шт."
+            raise BookingError(
+                f"Недостаточно «{prop.name}»: доступно {available} {unit}, запрошено {amount}."
+            )
+        resolved.append((prop, amount))
+    return resolved
 
 
 def _to_local_time(dt: datetime) -> time:
@@ -125,6 +187,8 @@ async def rooms_with_capacity(
             continue
         if await has_conflict(session, room.id, starts_at, ends_at):
             continue
+        if await has_offtime(session, room.id, starts_at, ends_at):
+            continue
         out.append(room)
     return out
 
@@ -162,6 +226,9 @@ async def create_booking(
     coffee_break: bool,
     coffee_headcount: int | None,
     urgent: bool = False,
+    room_struct: str | None = None,
+    company_id: int | None = None,
+    props: list[tuple[int, int]] | None = None,
 ) -> Booking:
     validate_window(room, starts_at, ends_at)
     if attendees > room.capacity:
@@ -185,11 +252,19 @@ async def create_booking(
             )
     if await has_conflict(session, room.id, starts_at, ends_at):
         raise BookingError("Слот уже занят.")
+    off = await has_offtime(session, room.id, starts_at, ends_at)
+    if off is not None:
+        raise BookingError(f"«{room.name}» недоступно в это время: {off.reason}.")
+    if room_struct is not None and room_struct not in ROOM_STRUCTS:
+        raise BookingError("Неизвестная расстановка.")
+    # Validate prop stock up-front so we don't create a booking we can't fulfil.
+    resolved_props = await validate_props(session, props or [])
 
     # Spec rule: bookings <2 days out are always urgent; the user can also opt in.
     booking = Booking(
         room_id=room.id,
         company=company,
+        company_id=company_id,
         contact_name=contact_name,
         phone=phone,
         customer_telegram_id=customer_telegram_id,
@@ -198,6 +273,7 @@ async def create_booking(
         event_name=event_name,
         description=description,
         attendees=attendees,
+        room_struct=room_struct,
         coffee_break=coffee_break,
         coffee_headcount=coffee_headcount if coffee_break else None,
         starts_at=starts_at,
@@ -216,6 +292,22 @@ async def create_booking(
             note="created",
         )
     )
+    for prop, amount in resolved_props:
+        session.add(BookingProp(booking_id=booking.id, prop_id=prop.id, amount=amount))
+    # Copy the global prep-checklist template onto the booking.
+    template = (
+        await session.execute(
+            select(ChecklistTemplateItem).order_by(
+                ChecklistTemplateItem.sort_order, ChecklistTemplateItem.id
+            )
+        )
+    ).scalars().all()
+    for item in template:
+        session.add(
+            BookingChecklistItem(
+                booking_id=booking.id, text=item.text, done=False, sort_order=item.sort_order
+            )
+        )
     return booking
 
 
@@ -278,6 +370,8 @@ async def reassign_booking(
             session, room.id, booking.starts_at, booking.ends_at, exclude_id=booking.id
         ):
             raise BookingError(f"«{room.name}» занято в это время.")
+        if await has_offtime(session, room.id, booking.starts_at, booking.ends_at):
+            raise BookingError(f"«{room.name}» недоступно в это время (запланирован простой).")
         target = room
     elif zone_id is not None:
         stmt = (
@@ -322,6 +416,8 @@ async def get_booking_with_details(session: AsyncSession, booking_id: int) -> Bo
             selectinload(Booking.room),
             selectinload(Booking.status_history),
             selectinload(Booking.feedback),
+            selectinload(Booking.checklist),
+            selectinload(Booking.props),
         )
     )
     return (await session.execute(stmt)).scalar_one_or_none()

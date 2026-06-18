@@ -16,7 +16,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Booking, BookingStatus, Room
+from app.models import Booking, BookingStatus, Room, RoomOfftime
 from app.services.bookings import rooms_with_capacity
 
 SLOT = timedelta(minutes=30)
@@ -65,6 +65,18 @@ async def _busy_by_room(
     )
     out: dict[int, list[Interval]] = defaultdict(list)
     for rid, s, e in (await session.execute(stmt)).all():
+        if s.tzinfo is None:
+            s = s.replace(tzinfo=timezone.utc)
+        if e.tzinfo is None:
+            e = e.replace(tzinfo=timezone.utc)
+        out[rid].append((s, e))
+    # Scheduled off-times block the room exactly like a booking does.
+    off_stmt = select(RoomOfftime.room_id, RoomOfftime.starts_at, RoomOfftime.ends_at).where(
+        RoomOfftime.room_id.in_(room_ids),
+        RoomOfftime.starts_at < range_end,
+        RoomOfftime.ends_at > range_start,
+    )
+    for rid, s, e in (await session.execute(off_stmt)).all():
         if s.tzinfo is None:
             s = s.replace(tzinfo=timezone.utc)
         if e.tzinfo is None:

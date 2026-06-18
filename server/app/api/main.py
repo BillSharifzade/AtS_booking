@@ -6,13 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routers import (
+    articles,
     audit,
     auth,
     bookings,
     bot_texts,
     chat,
+    checklist,
+    client,
+    companies,
     notifications,
+    offtimes,
     panel_users,
+    props,
     reports,
     rooms,
     users,
@@ -72,3 +78,9 @@ app.include_router(chat.router)
 app.include_router(notifications.router)
 app.include_router(reports.router)
 app.include_router(panel_users.router)
+app.include_router(companies.router)
+app.include_router(props.router)
+app.include_router(checklist.router)
+app.include_router(offtimes.router)
+app.include_router(articles.router)
+app.include_router(client.router)

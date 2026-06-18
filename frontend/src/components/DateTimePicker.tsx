@@ -32,6 +32,7 @@ export default function DateTimePicker({
   });
   const [days, setDays] = useState<Record<string, boolean>>({});
   const [loadingDays, setLoadingDays] = useState(false);
+  const [daysError, setDaysError] = useState<string | null>(null);
   const [slots, setSlots] = useState<ZoneSlot[]>([]);
   const [loadingSlots, setLoadingSlots] = useState(false);
 
@@ -41,12 +42,15 @@ export default function DateTimePicker({
     const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
     let active = true;
     setLoadingDays(true);
+    setDaysError(null);
     api.zoneDays(zoneId, ymd(first), ymd(last), attendees)
       .then((rows) => { if (active) setDays(Object.fromEntries(rows.map((r) => [r.date, r.available]))); })
-      .catch(() => { if (active) setDays({}); })
+      .catch((e) => { if (active) { setDays({}); setDaysError((e as Error).message || "Не удалось загрузить даты"); } })
       .finally(() => { if (active) setLoadingDays(false); });
     return () => { active = false; };
   }, [zoneId, attendees, month]);
+
+  const anyAvailable = useMemo(() => Object.values(days).some(Boolean), [days]);
 
   useEffect(() => {
     if (zoneId == null || !attendees || !value.date) { setSlots([]); return; }
@@ -84,6 +88,9 @@ export default function DateTimePicker({
   if (zoneId == null) {
     return <div className="dtp-hint">Сначала выберите зону, чтобы увидеть свободные даты и время.</div>;
   }
+  if (!attendees) {
+    return <div className="dtp-hint">Укажите число участников, чтобы увидеть свободные даты.</div>;
+  }
 
   return (
     <div className="dtp">
@@ -111,6 +118,11 @@ export default function DateTimePicker({
             ),
           )}
         </div>
+        {daysError ? (
+          <div className="dtp-hint error-text">Не удалось загрузить свободные даты: {daysError}</div>
+        ) : !loadingDays && !anyAvailable ? (
+          <div className="dtp-hint">В этой зоне нет свободных дат в этом месяце для указанного числа участников. Попробуйте другой месяц или зону.</div>
+        ) : null}
       </div>
 
       <div className="dtp-times">

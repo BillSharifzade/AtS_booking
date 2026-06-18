@@ -51,12 +51,16 @@ export type Room = {
   zone_id: number;
   zone_name: string;
   capacity: number;
+  meter_squared: number | null;
   open_time: string;
   close_time: string;
   is_active: boolean;
   is_coffee_break: boolean;
   notes: string | null;
 };
+
+// Seating arrangements ("Расстановка").
+export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped";
 
 export type RoomImage = {
   id: number;
@@ -72,10 +76,12 @@ export type Booking = {
   phone: string;
   customer_telegram_id: number;
   customer_username: string | null;
+  company_id: number | null;
   event_type: string;
   event_name: string;
   description: string | null;
   attendees: number;
+  room_struct: RoomStruct | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
   coffee_status: string;
@@ -100,7 +106,17 @@ export type StatusHistory = {
   created_at: string;
 };
 
-export type Feedback = { rating: number; comment: string | null; created_at: string };
+export type Feedback = {
+  rating: number;
+  room_rating: number | null;
+  service_rating: number | null;
+  props_rating: number | null;
+  comment: string | null;
+  created_at: string;
+};
+
+export type BookingChecklistItem = { id: number; text: string; done: boolean; sort_order: number };
+export type BookingProp = { prop_id: number; name: string; amount: number; unit: string | null; kind: string };
 
 export type CoffeeBreak = {
   id: number;
@@ -121,6 +137,8 @@ export type BookingWithRoom = Booking & {
   room: Room;
   status_history: StatusHistory[];
   feedback: Feedback | null;
+  checklist: BookingChecklistItem[];
+  props: BookingProp[];
 };
 
 export type Audit = {
@@ -169,6 +187,7 @@ export type UpcomingItem = {
   attendees: number;
   is_urgent: boolean;
 };
+export type CompanyStat = { company: string; count: number };
 export type DashboardSummary = {
   date_from: string | null;
   date_to: string | null;
@@ -180,8 +199,18 @@ export type DashboardSummary = {
   coffee_headcount: number;
   avg_rating: number | null;
   feedback_count: number;
+  avg_room_rating: number | null;
+  avg_service_rating: number | null;
+  avg_props_rating: number | null;
+  completion_rate: number | null;
+  approval_rate: number | null;
+  avg_lead_hours: number | null;
+  active_rooms: number;
+  active_companies: number;
   by_zone: ZoneStat[];
   top_rooms: RoomStat[];
+  top_companies: CompanyStat[];
+  by_struct: Record<string, number>;
   upcoming: UpcomingItem[];
 };
 
@@ -205,6 +234,7 @@ export type NewBooking = {
   zone_id?: number;
   room_id?: number;
   company: string;
+  company_id?: number | null;
   contact_name: string;
   phone: string;
   customer_telegram_id: number;
@@ -213,12 +243,75 @@ export type NewBooking = {
   event_name: string;
   description: string | null;
   attendees: number;
+  room_struct?: RoomStruct | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
   is_urgent: boolean;
   starts_at: string;
   ends_at: string;
+  props?: { prop_id: number; amount: number }[];
 };
+
+export type Company = {
+  id: number;
+  name: string;
+  website_url: string | null;
+  is_active: boolean;
+  has_logo: boolean;
+  created_at: string;
+};
+
+export type Prop = {
+  id: number;
+  name: string;
+  kind: "tech" | "office";
+  unit: string | null;
+  amount: number;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ChecklistItem = { id: number; text: string; sort_order: number };
+
+export type Offtime = {
+  id: number;
+  room_id: number;
+  room_name: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string;
+  description: string | null;
+  created_at: string;
+};
+
+export type Article = {
+  id: number;
+  title: string;
+  category: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Review = {
+  booking_id: number;
+  event_name: string;
+  company: string;
+  room: string;
+  zone: string;
+  customer_telegram_id: number;
+  rating: number;
+  room_rating: number | null;
+  service_rating: number | null;
+  props_rating: number | null;
+  comment: string | null;
+  created_at: string;
+};
+
+export function companyLogoUrl(id: number): string {
+  return `${BASE}/companies/${id}/logo`;
+}
 
 export const api = {
   requestCode: (telegram_id: number) =>
@@ -287,6 +380,70 @@ export const api = {
   listCoffee: () => request<CoffeeBreak[]>("/bookings/coffee"),
   setCoffee: (id: number, body: { coffee_status?: string; coffee_room_id?: number | null }) =>
     request<BookingWithRoom>(`/bookings/${id}/coffee`, { method: "PATCH", body: JSON.stringify(body) }),
+  toggleChecklistItem: (bookingId: number, itemId: number, done: boolean) =>
+    request<BookingChecklistItem>(`/bookings/${bookingId}/checklist/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ done }),
+    }),
+  listReviews: () => request<Review[]>("/bookings/reviews"),
+
+  // ---- Companies (#4) ----
+  listCompanies: (activeOnly = false) =>
+    request<Company[]>(`/companies${activeOnly ? "?active_only=true" : ""}`),
+  createCompany: (data: { name: string; website_url?: string | null; is_active?: boolean; logo_content_type?: string | null; logo_data?: string | null }) =>
+    request<Company>("/companies", { method: "POST", body: JSON.stringify(data) }),
+  updateCompany: (id: number, data: Record<string, unknown>) =>
+    request<Company>(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteCompany: (id: number) => request<void>(`/companies/${id}`, { method: "DELETE" }),
+
+  // ---- Props / Оборудование (#6) ----
+  listProps: (opts: { activeOnly?: boolean; kind?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.activeOnly) qs.set("active_only", "true");
+    if (opts.kind) qs.set("kind", opts.kind);
+    return request<Prop[]>(`/props?${qs.toString()}`);
+  },
+  createProp: (data: Partial<Prop>) =>
+    request<Prop>("/props", { method: "POST", body: JSON.stringify(data) }),
+  updateProp: (id: number, data: Partial<Prop>) =>
+    request<Prop>(`/props/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteProp: (id: number) => request<void>(`/props/${id}`, { method: "DELETE" }),
+
+  // ---- Checklist template (#7) ----
+  listChecklist: () => request<ChecklistItem[]>("/checklist-template"),
+  createChecklistItem: (text: string) =>
+    request<ChecklistItem>("/checklist-template", { method: "POST", body: JSON.stringify({ text }) }),
+  updateChecklistItem: (id: number, data: { text?: string; sort_order?: number }) =>
+    request<ChecklistItem>(`/checklist-template/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteChecklistItem: (id: number) =>
+    request<void>(`/checklist-template/${id}`, { method: "DELETE" }),
+
+  // ---- Off-time (#8) ----
+  listOfftimes: (opts: { roomId?: number; upcomingOnly?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.roomId) qs.set("room_id", String(opts.roomId));
+    if (opts.upcomingOnly) qs.set("upcoming_only", "true");
+    return request<Offtime[]>(`/offtimes?${qs.toString()}`);
+  },
+  createOfftime: (data: { room_id: number; starts_at: string; ends_at: string; reason: string; description?: string | null }) =>
+    request<Offtime>("/offtimes", { method: "POST", body: JSON.stringify(data) }),
+  updateOfftime: (id: number, data: Record<string, unknown>) =>
+    request<Offtime>(`/offtimes/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteOfftime: (id: number) => request<void>(`/offtimes/${id}`, { method: "DELETE" }),
+
+  // ---- Articles / База знаний (#10) ----
+  listArticles: (opts: { q?: string; category?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.q) qs.set("q", opts.q);
+    if (opts.category) qs.set("category", opts.category);
+    return request<Article[]>(`/articles?${qs.toString()}`);
+  },
+  getArticle: (id: number) => request<Article>(`/articles/${id}`),
+  createArticle: (data: { title: string; category: string; body: string }) =>
+    request<Article>("/articles", { method: "POST", body: JSON.stringify(data) }),
+  updateArticle: (id: number, data: Partial<{ title: string; category: string; body: string }>) =>
+    request<Article>(`/articles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteArticle: (id: number) => request<void>(`/articles/${id}`, { method: "DELETE" }),
 
   audit: () => request<Audit[]>("/audit"),
 

@@ -72,6 +72,50 @@ export default function Layout() {
             <span>Помещения</span>
           </NavLink>
 
+          <NavLink to="/companies" className={linkClass} title="Компании">
+            <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 21h18" /><path d="M5 21V7l8-4v18" /><path d="M19 21V11l-6-4" /><path d="M9 9v.01M9 12v.01M9 15v.01" />
+            </svg>
+            <span>Компании</span>
+          </NavLink>
+
+          <NavLink to="/props" className={linkClass} title="Оборудование">
+            <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+            </svg>
+            <span>Оборудование</span>
+          </NavLink>
+
+          <NavLink to="/offtimes" className={linkClass} title="Недоступность помещений">
+            <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="9" /><path d="M5.6 5.6l12.8 12.8" />
+            </svg>
+            <span>Недоступность</span>
+          </NavLink>
+
+          <NavLink to="/reviews" className={linkClass} title="Отзывы">
+            <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2l2.6 6.3 6.8.5-5.2 4.4 1.6 6.6L12 16.8 6.2 20.4l1.6-6.6L2.6 8.8l6.8-.5z" />
+            </svg>
+            <span>Отзывы</span>
+          </NavLink>
+
+          <NavLink to="/knowledge" className={linkClass} title="База знаний">
+            <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+            </svg>
+            <span>База знаний</span>
+          </NavLink>
+
+          {admin && (
+            <NavLink to="/checklist" className={linkClass} title="Чек-лист подготовки">
+              <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              </svg>
+              <span>Чек-лист</span>
+            </NavLink>
+          )}
+
           <NavLink to="/" end className={linkClass} title="Дашборд">
             <svg className="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" />

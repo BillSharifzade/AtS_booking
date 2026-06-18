@@ -2,10 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, BookingWithRoom, Room } from "../api";
 import { isAdmin } from "../auth";
-import { COFFEE_STATUS_LABELS, COFFEE_STATUS_ORDER, RESULT_OUTCOME_LABELS, RESULT_OUTCOME_ORDER } from "../labels";
+import { COFFEE_STATUS_LABELS, COFFEE_STATUS_ORDER, RESULT_OUTCOME_LABELS, RESULT_OUTCOME_ORDER, ROOM_STRUCT_LABELS } from "../labels";
 import StatusBadge from "../components/StatusBadge";
 import UserName from "../components/UserName";
 import ChatModal from "../components/ChatModal";
+import RoomStructDiagram from "../components/RoomStructDiagram";
+import Stars from "../components/Stars";
 import { CardSkeleton } from "../components/Skeleton";
 import { useNotifications } from "../notifications";
 
@@ -100,6 +102,15 @@ export default function BookingDetailPage() {
             <div className="k">Начало</div><div>{fmt(b.starts_at)}</div>
             <div className="k">Окончание</div><div>{fmt(b.ends_at)}</div>
             <div className="k">Участников</div><div>{b.attendees}</div>
+            {b.room_struct && (
+              <>
+                <div className="k">Расстановка</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                  <RoomStructDiagram struct={b.room_struct} className="struct-mini" />
+                  <span>{ROOM_STRUCT_LABELS[b.room_struct]}</span>
+                </div>
+              </>
+            )}
             <div className="k">Кофе-брейк</div>
             <div>
               {b.coffee_break ? `да${b.coffee_headcount ? ` (${b.coffee_headcount} чел.)` : ""}` : "нет"}
@@ -188,6 +199,53 @@ export default function BookingDetailPage() {
         </div>
       )}
 
+      {b.props.length > 0 && (
+        <div className="card">
+          <h3>Оборудование</h3>
+          <table>
+            <thead><tr><th>Позиция</th><th>Тип</th><th>Количество</th></tr></thead>
+            <tbody>
+              {b.props.map((p) => (
+                <tr key={p.prop_id}>
+                  <td>{p.name}</td>
+                  <td><span className="badge zone">{p.kind === "office" ? "Расходники" : "Техника"}</span></td>
+                  <td>{p.amount} {p.unit || "шт."}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {b.checklist.length > 0 && (
+        <div className="card">
+          <h3>Чек-лист подготовки</h3>
+          {(() => {
+            const done = b.checklist.filter((c) => c.done).length;
+            const pct = Math.round((done / b.checklist.length) * 100);
+            return (
+              <>
+                <div className="checklist-progress"><span style={{ width: `${pct}%` }} /></div>
+                <span className="field-hint">Готово {done} из {b.checklist.length}</span>
+                <div className="checklist" style={{ marginTop: 8 }}>
+                  {b.checklist.map((it) => (
+                    <label key={it.id} className={`checklist-item ${it.done ? "done" : ""}`}>
+                      <input
+                        type="checkbox"
+                        checked={it.done}
+                        disabled={!admin || busy}
+                        onChange={(e) => act(() => api.toggleChecklistItem(b.id, it.id, e.target.checked))}
+                      />
+                      <span className="ci-text">{it.text}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      )}
+
       {(b.result_outcome || b.result_note) && (
         <div className="card">
           <h3>Итог мероприятия</h3>
@@ -210,12 +268,17 @@ export default function BookingDetailPage() {
         <div className="card">
           <h3>Отзыв заказчика</h3>
           <div className="kv">
-            <div className="k">Оценка</div>
-            <div className="rating-stars">
-              <span className="stars-on">{"★".repeat(b.feedback.rating)}</span>
-              <span className="stars-off">{"★".repeat(5 - b.feedback.rating)}</span>
-              <span className="rating-num">{b.feedback.rating}/5</span>
-            </div>
+            <div className="k">Общая оценка</div>
+            <div><Stars value={b.feedback.rating} /></div>
+            {b.feedback.room_rating != null && (
+              <><div className="k">Помещение</div><div><Stars value={b.feedback.room_rating} /></div></>
+            )}
+            {b.feedback.service_rating != null && (
+              <><div className="k">Сервис</div><div><Stars value={b.feedback.service_rating} /></div></>
+            )}
+            {b.feedback.props_rating != null && (
+              <><div className="k">Оборудование</div><div><Stars value={b.feedback.props_rating} /></div></>
+            )}
             <div className="k">Комментарий</div><div>{b.feedback.comment || "—"}</div>
           </div>
         </div>

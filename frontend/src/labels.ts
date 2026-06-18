@@ -17,6 +17,21 @@ export const COFFEE_STATUS_LABELS: Record<string, string> = {
 };
 export const COFFEE_STATUS_ORDER = ["pending", "ready", "served", "not_required"];
 
+// Seating arrangements ("Расстановка", #3).
+export const ROOM_STRUCT_LABELS: Record<string, string> = {
+  theatre: "Театр",
+  class: "Класс",
+  banquet: "Банкет",
+  u_shaped: "П-образная",
+};
+export const ROOM_STRUCT_HINTS: Record<string, string> = {
+  theatre: "Ряды стульев лицом к экрану, максимум мест",
+  class: "Ряды столов со стульями, есть рабочая поверхность",
+  banquet: "Группы за отдельными столами",
+  u_shaped: "Столы буквой «П», экран в открытой части",
+};
+export const ROOM_STRUCT_ORDER = ["theatre", "class", "banquet", "u_shaped"];
+
 export const RESULT_OUTCOME_LABELS: Record<string, string> = {
   held: "Состоялось",
   partial: "Состоялось частично",

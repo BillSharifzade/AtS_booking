@@ -47,10 +47,6 @@ export default function CoffeePage() {
   return (
     <div>
       <h2>Кофе-брейки</h2>
-      <p className="page-hint">
-        Предстоящие мероприятия с кофе-брейком (Модуль E). Отметьте готовность и назначьте помещение,
-        где он будет организован. Кофе-брейк готовится при наличии гостей.
-      </p>
       {error && <div className="error">{error}</div>}
 
       {loading ? (

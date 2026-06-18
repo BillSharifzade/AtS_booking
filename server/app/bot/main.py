@@ -2,10 +2,17 @@ import asyncio
 import logging
 
 from aiogram import Dispatcher
-from aiogram.types import BotCommand, ErrorEvent
+from aiogram.types import (
+    BotCommand,
+    ErrorEvent,
+    MenuButtonCommands,
+    MenuButtonWebApp,
+    WebAppInfo,
+)
 
 from app.bot.handlers import router
 from app.bot.reminders import start_scheduler
+from app.config import settings
 from app.services.bot_texts import refresh_cache
 from app.telegram import get_bot, send_text
 
@@ -43,6 +50,17 @@ async def _run() -> None:
     dp.errors.register(_on_error)
     await refresh_cache()  # load admin text overrides before serving
     await bot.set_my_commands(BOT_COMMANDS)
+    # Persistent button next to the message input: launch the Mini App when its URL
+    # is configured, otherwise fall back to the default commands menu.
+    if settings.miniapp_url:
+        await bot.set_chat_menu_button(
+            menu_button=MenuButtonWebApp(
+                text="Бронирование",
+                web_app=WebAppInfo(url=settings.miniapp_url),
+            )
+        )
+    else:
+        await bot.set_chat_menu_button(menu_button=MenuButtonCommands())
     start_scheduler()
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

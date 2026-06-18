@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { api, Booking, NewBooking, Status, Zone } from "../api";
+import { api, Booking, Company, NewBooking, Prop, RoomStruct, Status, Zone } from "../api";
 import { isAdmin } from "../auth";
 import StatusBadge from "../components/StatusBadge";
 import { TableSkeleton } from "../components/Skeleton";
 import KanbanBoard from "../components/KanbanBoard";
 import DateTimePicker from "../components/DateTimePicker";
+import RoomStructPicker from "../components/RoomStructPicker";
 import { useNotifications } from "../notifications";
 
 const VIEW_KEY = "ats_bookings_view";
@@ -33,6 +34,9 @@ type FormState = {
   start: string;
   end: string;
   company: string;
+  company_id: string;
+  room_struct: RoomStruct | "";
+  props: Record<number, string>; // prop_id -> amount (string)
   contact_name: string;
   phone: string;
   customer_telegram_id: string;
@@ -52,6 +56,9 @@ const EMPTY_FORM: FormState = {
   start: "",
   end: "",
   company: "",
+  company_id: "",
+  room_struct: "",
+  props: {},
   contact_name: "",
   phone: "",
   customer_telegram_id: "",
@@ -79,6 +86,8 @@ export default function BookingsPage() {
 
   const [creating, setCreating] = useState(false);
   const [zones, setZones] = useState<Zone[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [propsList, setPropsList] = useState<Prop[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,18 +112,33 @@ export default function BookingsPage() {
     setError(null);
     setForm(EMPTY_FORM);
     setCreating(true);
-    const zs = await api.listZones();
+    const [zs, cs, ps] = await Promise.all([
+      api.listZones(),
+      api.listCompanies(true),
+      api.listProps({ activeOnly: true }),
+    ]);
     setZones(zs);
-    if (zs.length > 0) setForm((f) => ({ ...f, zone_id: String(zs[0].id) }));
+    setCompanies(cs);
+    setPropsList(ps);
+    // Prefer the first zone that actually has rooms — auto-selecting an empty zone
+    // would leave the date picker with every day disabled and no way to proceed.
+    const firstUsable = zs.find((z) => z.room_count > 0) ?? zs[0];
+    if (firstUsable) setForm((f) => ({ ...f, zone_id: String(firstUsable.id) }));
   };
 
   const submit = async () => {
     setBusy(true);
     setError(null);
     try {
+      const props = Object.entries(form.props)
+        .map(([id, amt]) => ({ prop_id: Number(id), amount: parseInt(amt, 10) || 0 }))
+        .filter((p) => p.amount > 0);
       const payload: NewBooking = {
         zone_id: parseInt(form.zone_id, 10),
         company: form.company.trim(),
+        company_id: form.company_id ? parseInt(form.company_id, 10) : null,
+        room_struct: form.room_struct || null,
+        props,
         contact_name: form.contact_name.trim(),
         phone: form.phone.trim(),
         customer_telegram_id: parseInt(form.customer_telegram_id, 10),
@@ -274,9 +298,49 @@ export default function BookingsPage() {
                   </div>
                   <div className="field"><label>Описание</label>
                     <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+
+                  <div className="field">
+                    <label>Расстановка</label>
+                    <RoomStructPicker value={form.room_struct || null} onChange={(v) => setForm({ ...form, room_struct: v })} />
+                  </div>
+
+                  {propsList.length > 0 && (
+                    <div className="field">
+                      <label>Оборудование</label>
+                      {propsList.map((p) => (
+                        <div key={p.id} className="prop-pick-row">
+                          <span className="prop-name">{p.name} <span className="prop-unit">· доступно {p.amount} {p.unit || "шт."}</span></span>
+                          <input
+                            inputMode="numeric"
+                            placeholder="0"
+                            value={form.props[p.id] ?? ""}
+                            max={p.amount}
+                            onChange={(e) => setForm({ ...form, props: { ...form.props, [p.id]: e.target.value } })}
+                          />
+                          <span className="prop-unit">{p.unit || "шт."}</span>
+                        </div>
+                      ))}
+                      <span className="field-hint">Укажите нужное количество. При нехватке заявку не получится создать.</span>
+                    </div>
+                  )}
                   <div className="row2">
                     <div className="field"><label>Компания</label>
-                      <input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} /></div>
+                      {companies.length > 0 ? (
+                        <select
+                          value={form.company_id}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            const c = companies.find((x) => String(x.id) === id);
+                            setForm({ ...form, company_id: id, company: c ? c.name : form.company });
+                          }}
+                        >
+                          <option value="">— выберите компанию —</option>
+                          {companies.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      ) : (
+                        <input value={form.company} placeholder="Название компании" onChange={(e) => setForm({ ...form, company: e.target.value })} />
+                      )}
+                    </div>
                     <div className="field"><label>Контактное лицо</label>
                       <input value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} /></div>
                   </div>

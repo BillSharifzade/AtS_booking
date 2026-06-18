@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, DashboardSummary, Status } from "../api";
-import { STATUS_LABELS } from "../labels";
+import { ROOM_STRUCT_LABELS, STATUS_LABELS } from "../labels";
 import { CardSkeleton } from "../components/Skeleton";
+import Stars from "../components/Stars";
 
 // ---- date helpers (YYYY-MM-DD in local wall-clock; backend treats these as UTC days) ----
 function iso(d: Date): string {
@@ -160,13 +161,10 @@ export default function DashboardPage() {
           <div className="stat-row-mini">
             <span><b>{num(data.total_attendees)}</b> участников суммарно</span>
             <span><b>{num(data.coffee_breaks)}</b> с кофе-брейком ({num(data.coffee_headcount)} чел.)</span>
-            <span>
-              {data.avg_rating != null ? (
-                <><b>★ {data.avg_rating.toLocaleString("ru-RU")}</b> средняя оценка ({num(data.feedback_count)})</>
-              ) : (
-                <>оценок пока нет</>
-              )}
-            </span>
+            <span><b>{data.approval_rate != null ? `${Math.round(data.approval_rate * 100)}%` : "—"}</b> одобрено</span>
+            <span><b>{data.completion_rate != null ? `${Math.round(data.completion_rate * 100)}%` : "—"}</b> проведено</span>
+            <span><b>{data.avg_lead_hours != null ? `${Math.round(data.avg_lead_hours)} ч` : "—"}</b> средний срок до события</span>
+            <span><b>{num(data.active_rooms)}</b> активных помещений · <b>{num(data.active_companies)}</b> компаний</span>
           </div>
 
           <div className="dash-grid">
@@ -249,6 +247,61 @@ export default function DashboardPage() {
                     ))}
                   </tbody>
                 </table>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Качество обслуживания</h3>
+              {data.feedback_count === 0 ? (
+                <div className="dash-empty">Отзывов за период нет.</div>
+              ) : (
+                <div className="kv" style={{ gridTemplateColumns: "auto 1fr", rowGap: 12 }}>
+                  {([["Общая", data.avg_rating], ["Помещение", data.avg_room_rating], ["Сервис", data.avg_service_rating], ["Оборудование", data.avg_props_rating]] as const).map(([label, v]) => (
+                    <div key={label} style={{ display: "contents" }}>
+                      <div className="k">{label}</div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <Stars value={v != null ? Math.round(v) : null} showNum={false} />
+                        <span className="rating-num">{v != null ? v.toLocaleString("ru-RU") : "—"}</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="k" style={{ color: "var(--muted-2)" }}>Отзывов</div>
+                  <div style={{ color: "var(--muted)" }}>{num(data.feedback_count)}</div>
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Топ компаний</h3>
+              {data.top_companies.length === 0 ? (
+                <div className="dash-empty">За период нет заявок.</div>
+              ) : (
+                <div className="bar-list">
+                  {data.top_companies.map((c) => (
+                    <div className="bar-item" key={c.company}>
+                      <div className="bar-name">{c.company}</div>
+                      <Bar value={c.count} max={Math.max(1, ...data.top_companies.map((x) => x.count))} className="bar-zone" />
+                      <div className="bar-val">{num(c.count)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>Расстановки</h3>
+              {Object.keys(data.by_struct).length === 0 ? (
+                <div className="dash-empty">Расстановка не указывалась.</div>
+              ) : (
+                <div className="bar-list">
+                  {Object.entries(data.by_struct).sort((a, b) => b[1] - a[1]).map(([s, v]) => (
+                    <div className="bar-item" key={s}>
+                      <div className="bar-name">{ROOM_STRUCT_LABELS[s] ?? s}</div>
+                      <Bar value={v} max={Math.max(1, ...Object.values(data.by_struct))} className="bar-approved" />
+                      <div className="bar-val">{num(v)}</div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>

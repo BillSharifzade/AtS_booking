@@ -7,20 +7,31 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_admin, current_user
 from app.db import get_session
-from app.models import Booking, BookingStatus, Room, Zone
+from app.models import (
+    Booking,
+    BookingChecklistItem,
+    BookingStatus,
+    Feedback,
+    Room,
+    Zone,
+)
 from app.schemas import (
     COFFEE_STATUSES,
     RESULT_OUTCOMES,
     AlternativeSlot,
     ApproveIn,
+    BookingChecklistItemOut,
+    BookingChecklistToggle,
     BookingCreate,
     BookingOut,
+    BookingPropOut,
     BookingWithRoom,
     CoffeeBreakOut,
     CoffeeUpdate,
     CompleteIn,
     ReassignIn,
     RejectIn,
+    ReviewOut,
 )
 from app.services import availability as avail
 from app.services import bookings as svc
@@ -91,6 +102,39 @@ async def coffee_breaks(
     ]
 
 
+# NB: declared before "/{booking_id}" so "reviews" isn't parsed as a booking id.
+@router.get("/reviews", response_model=list[ReviewOut])
+async def list_reviews(
+    _: tuple[int, str] = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ReviewOut]:
+    """Admin reviews view: who / company / room / stars / comment (Module F, #12)."""
+    stmt = (
+        select(Booking, Feedback)
+        .join(Feedback, Feedback.booking_id == Booking.id)
+        .options(selectinload(Booking.room).selectinload(Room.zone))
+        .order_by(Feedback.created_at.desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        ReviewOut(
+            booking_id=b.id,
+            event_name=b.event_name,
+            company=b.company,
+            room=b.room.name if b.room else "—",
+            zone=b.room.zone.name if b.room and b.room.zone else "—",
+            customer_telegram_id=b.customer_telegram_id,
+            rating=f.rating,
+            room_rating=f.room_rating,
+            service_rating=f.service_rating,
+            props_rating=f.props_rating,
+            comment=f.comment,
+            created_at=f.created_at,
+        )
+        for b, f in rows
+    ]
+
+
 @router.get("/{booking_id}", response_model=BookingWithRoom)
 async def get_booking(
     booking_id: int,
@@ -146,6 +190,9 @@ async def create_booking_endpoint(
             coffee_break=payload.coffee_break,
             coffee_headcount=payload.coffee_headcount,
             urgent=payload.is_urgent,
+            room_struct=payload.room_struct,
+            company_id=payload.company_id,
+            props=[(p.prop_id, p.amount) for p in payload.props],
         )
         await svc.audit(session, admin_id, "booking.create", "booking", booking.id, f"«{booking.event_name}», {room.name}")
         await session.commit()
@@ -236,6 +283,24 @@ async def set_coffee(
     )
     await session.commit()
     return await svc.get_booking_with_details(session, booking_id)
+
+
+@router.patch("/{booking_id}/checklist/{item_id}", response_model=BookingChecklistItemOut)
+async def toggle_checklist_item(
+    booking_id: int,
+    item_id: int,
+    payload: BookingChecklistToggle,
+    admin_id: int = Depends(current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> BookingChecklistItem:
+    # Per-booking prep checklist (#9): admins tick/untick stages.
+    item = await session.get(BookingChecklistItem, item_id)
+    if item is None or item.booking_id != booking_id:
+        raise HTTPException(404, "Пункт чек-листа не найден.")
+    item.done = payload.done
+    await session.commit()
+    await session.refresh(item)
+    return item
 
 
 @router.post("/{booking_id}/approve", response_model=BookingOut)

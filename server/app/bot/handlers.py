@@ -15,6 +15,7 @@ from aiogram.types import (
     ReplyKeyboardRemove,
     KeyboardButton,
     CallbackQuery,
+    WebAppInfo,
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,7 +78,18 @@ def _yesno_kb() -> ReplyKeyboardMarkup:
 
 @router.message(CommandStart())
 async def start(msg: Message) -> None:
-    await msg.answer(t.START)
+    kb = None
+    if settings.miniapp_url:
+        # WebApp buttons require HTTPS and only work in private chats — /start is private.
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="🗓 Открыть бронирование",
+                    web_app=WebAppInfo(url=settings.miniapp_url),
+                )
+            ]]
+        )
+    await msg.answer(t.START, reply_markup=kb)
 
 
 @router.message(Command("whoami"))

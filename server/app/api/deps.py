@@ -2,7 +2,7 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.security import decode_jwt
+from app.security import InitDataError, decode_jwt, validate_init_data
 from app.services.access import ADMIN, resolve_role
 
 
@@ -32,3 +32,19 @@ async def current_admin(user: tuple[int, str] = Depends(current_user)) -> int:
     if role != ADMIN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="требуются права администратора")
     return tg_id
+
+
+async def current_customer(authorization: str = Header(default="")) -> dict:
+    """Authenticate a Telegram Mini App client via its signed ``initData``.
+
+    The mini app sends ``Authorization: tma <initData>`` (Telegram's convention).
+    Returns the verified Telegram user dict (id / first_name / last_name / username).
+    Customers are NOT panel users — this is a separate, self-serve auth path.
+    """
+    if not authorization.startswith("tma "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing init data")
+    init_data = authorization.removeprefix("tma ").strip()
+    try:
+        return validate_init_data(init_data)
+    except InitDataError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid init data")

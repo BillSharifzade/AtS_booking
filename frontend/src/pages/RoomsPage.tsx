@@ -10,6 +10,7 @@ type FormState = {
   name: string;
   zone_id: string;
   capacity: string;
+  meter_squared: string;
   open_time: string;
   close_time: string;
   notes: string;
@@ -21,6 +22,7 @@ const EMPTY: FormState = {
   name: "",
   zone_id: "",
   capacity: "10",
+  meter_squared: "",
   open_time: "08:00",
   close_time: "20:00",
   notes: "",
@@ -59,6 +61,7 @@ export default function RoomsPage() {
       name: r.name,
       zone_id: String(r.zone_id),
       capacity: String(r.capacity),
+      meter_squared: r.meter_squared != null ? String(r.meter_squared) : "",
       open_time: r.open_time.slice(0, 5),
       close_time: r.close_time.slice(0, 5),
       notes: r.notes ?? "",
@@ -76,6 +79,7 @@ export default function RoomsPage() {
         name: form.name,
         zone_id: parseInt(form.zone_id, 10),
         capacity: parseInt(form.capacity, 10),
+        meter_squared: form.meter_squared.trim() ? parseInt(form.meter_squared, 10) : null,
         open_time: form.open_time + ":00",
         close_time: form.close_time + ":00",
         notes: form.notes || null,
@@ -151,6 +155,12 @@ export default function RoomsPage() {
                 inputMode="numeric" /></div>
           </div>
           <div className="row2">
+            <div className="field"><label>Площадь, м²</label>
+              <input value={form.meter_squared} placeholder="напр. 45" inputMode="numeric"
+                onChange={(e) => setForm({ ...form, meter_squared: e.target.value })} /></div>
+            <div className="field" />
+          </div>
+          <div className="row2">
             <div className="field"><label>Открытие</label>
               <input type="time" value={form.open_time} onChange={(e) => setForm({ ...form, open_time: e.target.value })} /></div>
             <div className="field"><label>Закрытие</label>
@@ -202,7 +212,7 @@ export default function RoomsPage() {
                   {r.is_coffee_break && <span className="badge coffee" style={{ marginLeft: 8 }}>кофе-брейк</span>}
                 </td>
                 <td><span className="badge zone">{r.zone_name}</span></td>
-                <td>{r.capacity}</td>
+                <td>{r.capacity}{r.meter_squared != null && <span style={{ color: "var(--muted)" }}> · {r.meter_squared} м²</span>}</td>
                 <td>{r.open_time.slice(0, 5)}–{r.close_time.slice(0, 5)}</td>
                 <td><span className={`badge ${r.is_active ? "active" : "inactive"}`}>{r.is_active ? "активно" : "скрыто"}</span></td>
                 <td style={{ textAlign: "right" }}>

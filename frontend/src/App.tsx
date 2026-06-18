@@ -11,6 +11,12 @@ import RoomsPage from "./pages/RoomsPage";
 import AuditPage from "./pages/AuditPage";
 import BotTextsPage from "./pages/BotTextsPage";
 import UsersPage from "./pages/UsersPage";
+import CompaniesPage from "./pages/CompaniesPage";
+import PropsPage from "./pages/PropsPage";
+import ChecklistPage from "./pages/ChecklistPage";
+import OfftimesPage from "./pages/OfftimesPage";
+import KnowledgePage from "./pages/KnowledgePage";
+import ReviewsPage from "./pages/ReviewsPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const loc = useLocation();
@@ -41,6 +47,12 @@ export default function App() {
         <Route path="bookings/:id" element={<BookingDetailPage />} />
         <Route path="coffee" element={<CoffeePage />} />
         <Route path="rooms" element={<RoomsPage />} />
+        <Route path="companies" element={<CompaniesPage />} />
+        <Route path="props" element={<PropsPage />} />
+        <Route path="offtimes" element={<OfftimesPage />} />
+        <Route path="reviews" element={<ReviewsPage />} />
+        <Route path="knowledge" element={<KnowledgePage />} />
+        <Route path="checklist" element={<RequireAdmin><ChecklistPage /></RequireAdmin>} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="bot-texts" element={<BotTextsPage />} />
         <Route path="users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />

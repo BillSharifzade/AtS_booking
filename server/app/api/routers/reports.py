@@ -8,8 +8,8 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_user
 from app.db import get_session
-from app.models import Booking, BookingStatus, Feedback, Room, Zone
-from app.schemas import DashboardSummary, RoomStat, UpcomingItem, ZoneStat
+from app.models import Booking, BookingStatus, Company, Feedback, Room, Zone
+from app.schemas import CompanyStat, DashboardSummary, RoomStat, UpcomingItem, ZoneStat
 from app.services.bookings import audit
 from app.services.reports import build_bookings_workbook, period_bounds, report_filename
 
@@ -71,15 +71,67 @@ async def summary(
         )
     ).one()
 
-    # Average rating + feedback count over the period (joined to bookings for the date filter).
-    avg_rating, feedback_count = (
+    # Average ratings (overall + per aspect) + feedback count over the period.
+    avg_rating, avg_room, avg_service, avg_props, feedback_count = (
         await session.execute(
-            select(func.avg(Feedback.rating), func.count(Feedback.id))
+            select(
+                func.avg(Feedback.rating),
+                func.avg(Feedback.room_rating),
+                func.avg(Feedback.service_rating),
+                func.avg(Feedback.props_rating),
+                func.count(Feedback.id),
+            )
             .select_from(Feedback)
             .join(Booking, Feedback.booking_id == Booking.id)
             .where(*f)
         )
     ).one()
+
+    # Average lead time (booking made → event start), in hours.
+    avg_lead = (
+        await session.execute(
+            select(func.avg(func.extract("epoch", Booking.starts_at - Booking.created_at)) / 3600.0).where(*f)
+        )
+    ).scalar_one()
+
+    # Seating-arrangement breakdown.
+    struct_rows = (
+        await session.execute(
+            select(Booking.room_struct, func.count())
+            .where(*f, Booking.room_struct.is_not(None))
+            .group_by(Booking.room_struct)
+        )
+    ).all()
+    by_struct = {s: c for s, c in struct_rows}
+
+    # Top companies by booking count.
+    company_rows = (
+        await session.execute(
+            select(Booking.company, func.count(Booking.id))
+            .where(*f)
+            .group_by(Booking.company)
+            .order_by(func.count(Booking.id).desc())
+            .limit(5)
+        )
+    ).all()
+    top_companies = [CompanyStat(company=c or "—", count=n) for c, n in company_rows]
+
+    # Inventory counts (current, not range-bound).
+    active_rooms = (
+        await session.execute(select(func.count(Room.id)).where(Room.is_active.is_(True)))
+    ).scalar_one()
+    active_companies = (
+        await session.execute(select(func.count(Company.id)).where(Company.is_active.is_(True)))
+    ).scalar_one()
+
+    # Funnel rates derived from the status breakdown.
+    n_completed = by_status.get("completed", 0)
+    n_approved = by_status.get("approved", 0)
+    n_rejected = by_status.get("rejected", 0)
+    decided = n_approved + n_completed + n_rejected
+    approval_rate = round((n_approved + n_completed) / decided, 3) if decided else None
+    confirmed = n_approved + n_completed
+    completion_rate = round(n_completed / confirmed, 3) if confirmed else None
 
     # Bookings & attendees per zone.
     zone_rows = (
@@ -147,7 +199,17 @@ async def summary(
         coffee_headcount=coffee_head,
         avg_rating=round(float(avg_rating), 2) if avg_rating is not None else None,
         feedback_count=feedback_count,
+        avg_room_rating=round(float(avg_room), 2) if avg_room is not None else None,
+        avg_service_rating=round(float(avg_service), 2) if avg_service is not None else None,
+        avg_props_rating=round(float(avg_props), 2) if avg_props is not None else None,
+        completion_rate=completion_rate,
+        approval_rate=approval_rate,
+        avg_lead_hours=round(float(avg_lead), 1) if avg_lead is not None else None,
+        active_rooms=active_rooms,
+        active_companies=active_companies,
         by_zone=by_zone,
         top_rooms=top_rooms,
+        top_companies=top_companies,
+        by_struct=by_struct,
         upcoming=upcoming,
     )
