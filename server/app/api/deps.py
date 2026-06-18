@@ -2,7 +2,7 @@ from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.security import InitDataError, decode_jwt, validate_init_data
+from app.security import InitDataError, decode_jwt, guest_user, validate_init_data
 from app.services.access import ADMIN, resolve_role
 
 
@@ -35,16 +35,24 @@ async def current_admin(user: tuple[int, str] = Depends(current_user)) -> int:
 
 
 async def current_customer(authorization: str = Header(default="")) -> dict:
-    """Authenticate a Telegram Mini App client via its signed ``initData``.
+    """Authenticate a mini app client. Two self-serve modes (NOT panel users):
 
-    The mini app sends ``Authorization: tma <initData>`` (Telegram's convention).
-    Returns the verified Telegram user dict (id / first_name / last_name / username).
-    Customers are NOT panel users — this is a separate, self-serve auth path.
+    - Inside Telegram: ``Authorization: tma <initData>`` — verified Telegram user.
+    - Plain browser:   ``Authorization: guest <token>`` — a per-browser guest
+      identity (stable negative id), so the app also works outside Telegram.
+
+    Returns a user dict (id / first_name / last_name / username [/ is_guest]).
     """
-    if not authorization.startswith("tma "):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing init data")
-    init_data = authorization.removeprefix("tma ").strip()
-    try:
-        return validate_init_data(init_data)
-    except InitDataError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid init data")
+    if authorization.startswith("tma "):
+        init_data = authorization.removeprefix("tma ").strip()
+        try:
+            return validate_init_data(init_data)
+        except InitDataError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid init data")
+    if authorization.startswith("guest "):
+        token = authorization.removeprefix("guest ").strip()
+        try:
+            return guest_user(token)
+        except InitDataError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid guest token")
+    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing init data")

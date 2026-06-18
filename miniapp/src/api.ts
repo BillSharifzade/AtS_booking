@@ -1,4 +1,4 @@
-import { initData } from "./telegram";
+import { authHeader } from "./telegram";
 
 // API base: same-origin subpath in production (e.g. /booking/api), overridable for dev.
 export const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
@@ -6,7 +6,7 @@ export const BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000"
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `tma ${initData()}`,
+    Authorization: authHeader(),
     ...(init.headers as Record<string, string> | undefined),
   };
   const res = await fetch(`${BASE}${path}`, { ...init, headers });

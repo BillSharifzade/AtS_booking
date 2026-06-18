@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, NewBooking, Prop, RoomStruct } from "./api";
-import { haptic } from "./telegram";
+import { haptic, isTelegram } from "./telegram";
 import { ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
@@ -34,8 +34,11 @@ const emptyForm = (name: string): Form => ({
   coffee_break: false, coffee_headcount: "",
 });
 
+// Slots are stored as wall-clock with a trailing "Z"; format in UTC so the
+// displayed time matches what the user picked (and the raw end-time slice),
+// instead of being shifted into the browser's local timezone.
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
 export default function App() {
@@ -53,10 +56,14 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">AtS · Бронирование</div>
-        <div className="tabs">
-          <button className={tab === "new" ? "on" : ""} onClick={() => setTab("new")}>Новая заявка</button>
-          <button className={tab === "my" ? "on" : ""} onClick={() => setTab("my")}>Мои заявки</button>
+        <div className="brand-row">
+          <div className="brand"><span className="brand-mark">AtS</span><span>Бронирование</span></div>
+          {!isTelegram && <span className="guest-pill">Гость</span>}
+        </div>
+        <div className="tabs" data-active={tab}>
+          <span className="tab-pill" aria-hidden />
+          <button className={tab === "new" ? "on" : ""} onClick={() => { setTab("new"); haptic(); }}>Новая заявка</button>
+          <button className={tab === "my" ? "on" : ""} onClick={() => { setTab("my"); haptic(); }}>Мои заявки</button>
         </div>
       </header>
       {tab === "new" ? <Wizard boot={boot} onDone={() => setTab("my")} /> : <MyBookings />}
@@ -139,6 +146,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
     <div className="screen">
       <Stepper step={step} />
 
+      <div className="step-body" key={step}>
       {step === 0 && (
         <Section title="Кто бронирует?">
           {boot.companies.length > 0 ? (
@@ -232,6 +240,8 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           )}
         </Section>
       )}
+
+      </div>
 
       {err && <div className="error-box">{err}</div>}
 

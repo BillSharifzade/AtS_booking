@@ -34,6 +34,21 @@ class InitDataError(ValueError):
     """Raised when a Telegram Mini App initData payload fails validation."""
 
 
+def guest_user(token: str) -> dict:
+    """Synthesize a stable pseudo-user for a non-Telegram (plain browser) client.
+
+    The mini app sends an opaque per-browser token (kept in localStorage). We hash
+    it to a NEGATIVE id so guest bookings never collide with real Telegram user ids
+    (always positive) and each browser keeps its own "my bookings". Lets the app be
+    used outside Telegram without the "missing init data" wall.
+    """
+    if not token:
+        raise InitDataError("empty guest token")
+    digest = hashlib.sha256(token.encode()).digest()
+    gid = int.from_bytes(digest[:6], "big")  # 48-bit, comfortably within BigInteger
+    return {"id": -gid, "first_name": None, "last_name": None, "username": None, "is_guest": True}
+
+
 def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> dict:
     """Validate a Telegram WebApp ``initData`` string and return the embedded user dict
     (id / first_name / last_name / username). Follows Telegram's documented HMAC scheme:

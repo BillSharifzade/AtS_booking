@@ -42,9 +42,34 @@ export function initTelegram() {
   }
 }
 
-// The signed initData string used for API auth. Empty in a plain browser (dev).
+// The signed initData string used for API auth. Empty in a plain browser.
 export function initData(): string {
   return tg?.initData || "";
+}
+
+// True when actually running inside the Telegram client (signed initData present).
+export const isTelegram = !!(tg && tg.initData);
+
+// A stable per-browser id so the app works OUTSIDE Telegram (no "missing init
+// data" wall). Persisted in localStorage; the backend hashes it to a guest id.
+function guestToken(): string {
+  const KEY = "ats_guest_id";
+  try {
+    let id = localStorage.getItem(KEY);
+    if (!id) {
+      id = (crypto?.randomUUID?.() ?? `g_${Date.now()}_${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem(KEY, id);
+    }
+    return id;
+  } catch {
+    return "anon";
+  }
+}
+
+// Authorization header value: Telegram-signed when in Telegram, else guest.
+export function authHeader(): string {
+  const data = initData();
+  return data ? `tma ${data}` : `guest ${guestToken()}`;
 }
 
 export function haptic(kind: "light" | "success" | "error" = "light") {
