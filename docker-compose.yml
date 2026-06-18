@@ -69,15 +69,15 @@ services:
       - ./frontend:/app
       - /app/node_modules
 
-  # Client Telegram Mini Web App (#13). Dev server for local work. In production
-  # it is NOT run as a container — the existing host Nginx (serving
-  # dchr.koinotinav.com for another project) serves the built ./miniapp/dist under
-  # the /ats/ subpath and proxies /ats/api/ to the api service. Build with:
-  #   docker compose run --rm miniapp npm run build
-  # See deploy/nginx-ats.conf for the location blocks to add to that Nginx site.
+  # Client Telegram Mini Web App (#13). In production this serves the static BUILD
+  # (relative base "./") via `vite preview` on :5174; the recruitment project's
+  # Caddy (the edge for dchr.koinotinav.com) proxies /ats/* here and /ats/api/* to
+  # the api service. Serving the build (not the dev server) is required because the
+  # Vite dev server emits root-absolute module URLs that break under the /ats/
+  # subpath. See deploy/caddy-ats.md for the Caddyfile blocks to add to that edge.
   miniapp:
     build: ./miniapp
-    command: npm run dev -- --host 0.0.0.0 --port 5174
+    command: sh -c "npm run build && npx vite preview --host 0.0.0.0 --port 5174 --strictPort"
     environment:
       VITE_API_BASE_URL: ${MINIAPP_API_BASE_URL:-${VITE_API_BASE_URL}}
     ports:
