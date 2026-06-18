@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, Bootstrap, ClientBooking, NewBooking, Prop, RoomStruct } from "./api";
+import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, RoomStruct } from "./api";
 import { haptic, isTelegram } from "./telegram";
+import logoUrl from "./assets/logo.png";
 import { ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
@@ -57,7 +58,7 @@ export default function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand-row">
-          <div className="brand"><span className="brand-mark">AtS</span><span>Бронирование</span></div>
+          <div className="brand"><img className="brand-logo" src={logoUrl} alt="AtS" /><span>Бронирование</span></div>
           {!isTelegram && <span className="guest-pill">Гость</span>}
         </div>
         <div className="tabs" data-active={tab}>
@@ -150,11 +151,20 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       {step === 0 && (
         <Section title="Кто бронирует?">
           {boot.companies.length > 0 ? (
-            <div className="pick-list">
+            <div className="company-grid">
               {boot.companies.map((c) => (
-                <button key={c.id} className={`pick ${form.company_id === c.id ? "on" : ""}`} onClick={() => set({ company_id: c.id, company: c.name })}>
-                  <span className="pick-title">{c.name}</span>
-                  {form.company_id === c.id && <span className="pick-check">✓</span>}
+                <button
+                  key={c.id}
+                  className={`company-card ${form.company_id === c.id ? "on" : ""}`}
+                  onClick={() => { set({ company_id: c.id, company: c.name }); haptic(); }}
+                >
+                  <div className="company-logo">
+                    {c.has_logo
+                      ? <img src={companyLogoUrl(c.id)} alt="" loading="lazy" />
+                      : <span className="company-initials">{c.name.trim().charAt(0).toUpperCase()}</span>}
+                  </div>
+                  <span className="company-name">{c.name}</span>
+                  {form.company_id === c.id && <span className="company-check">✓</span>}
                 </button>
               ))}
             </div>
@@ -167,13 +177,17 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       {step === 1 && (
         <Section title="Зал, участники и время">
           <Field label="Зона">
-            <div className="chip-row">
-              {boot.zones.map((z) => (
-                <button key={z.id} className={`chip ${form.zone_id === z.id ? "on" : ""}`} onClick={() => set({ zone_id: z.id, slot: { date: "", start: "", end: "" } })}>
-                  {z.name} <span className="chip-sub">до {z.total_capacity}</span>
-                </button>
-              ))}
-            </div>
+            {boot.zones.length > 0 ? (
+              <div className="chip-row">
+                {boot.zones.map((z) => (
+                  <button key={z.id} className={`chip ${form.zone_id === z.id ? "on" : ""}`} onClick={() => set({ zone_id: z.id, slot: { date: "", start: "", end: "" } })}>
+                    {z.name} <span className="chip-sub">до {z.total_capacity}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="hint">Пока нет доступных залов для брони. Администратору нужно добавить хотя бы одно активное помещение (не «кофе-брейк»).</div>
+            )}
           </Field>
           <Field label="Участников">
             <input inputMode="numeric" value={form.attendees} onChange={(e) => set({ attendees: e.target.value, slot: { date: "", start: "", end: "" } })} />
