@@ -29,7 +29,7 @@ export type Status = "new" | "processing" | "approved" | "rejected" | "completed
 
 export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; has_logo: boolean };
 export type Zone = { id: number; name: string; room_count: number; total_capacity: number };
-export type Prop = { id: number; name: string; kind: "tech" | "office"; unit: string | null; amount: number; description: string | null };
+export type Prop = { id: number; name: string; kind: "tech" | "office"; unit: string | null; amount: number; available: number | null; description: string | null };
 export type ClientUser = { telegram_id: number; name: string | null; username: string | null };
 export type Bootstrap = { user: ClientUser; companies: Company[]; zones: Zone[]; props: Prop[] };
 export type ZoneDay = { date: string; available: boolean };

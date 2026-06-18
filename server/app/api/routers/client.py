@@ -7,13 +7,13 @@ through the same service layer as the bot, so all validation/notifications are s
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_customer
 from app.db import get_session
-from app.models import Booking, BookingStatus, Company, Feedback, Prop, Room, Zone
+from app.models import Booking, BookingProp, BookingStatus, Company, Feedback, Prop, Room, Zone
 from app.schemas import (
     ClientBookingCreate,
     ClientBookingOut,
@@ -67,6 +67,30 @@ async def _zones_out(session: AsyncSession) -> list[ZoneOut]:
     return out
 
 
+async def _props_out(session: AsyncSession) -> list[PropOut]:
+    """Active equipment with REAL-TIME availability (total stock minus amounts held
+    by active bookings) — matches what `validate_props` enforces at creation."""
+    props = (
+        await session.execute(select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name))
+    ).scalars().all()
+    committed = dict(
+        (
+            await session.execute(
+                select(BookingProp.prop_id, func.coalesce(func.sum(BookingProp.amount), 0))
+                .join(Booking, Booking.id == BookingProp.booking_id)
+                .where(Booking.status.in_(svc.ACTIVE_STATUSES))
+                .group_by(BookingProp.prop_id)
+            )
+        ).all()
+    )
+    out: list[PropOut] = []
+    for p in props:
+        po = PropOut.model_validate(p)
+        po.available = max(p.amount - committed.get(p.id, 0), 0)
+        out.append(po)
+    return out
+
+
 @router.get("/bootstrap", response_model=ClientBootstrap)
 async def bootstrap(
     user: dict = Depends(current_customer),
@@ -77,14 +101,11 @@ async def bootstrap(
     companies = (
         await session.execute(select(Company).where(Company.is_active.is_(True)).order_by(Company.name))
     ).scalars().all()
-    props = (
-        await session.execute(select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name))
-    ).scalars().all()
     return ClientBootstrap(
         user=ClientUser(telegram_id=user["id"], name=_user_name(user), username=user.get("username")),
         companies=[CompanyOut.model_validate(c) for c in companies],
         zones=await _zones_out(session),
-        props=[PropOut.model_validate(p) for p in props],
+        props=await _props_out(session),
     )
 
 

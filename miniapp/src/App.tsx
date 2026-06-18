@@ -83,6 +83,14 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   const attendeesNum = parseInt(form.attendees, 10) || 0;
   const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }));
 
+  // Mirror the backend rule (services/bookings.is_urgent): bookings starting in
+  // <2 days are urgent automatically, so the checkbox is forced on and locked.
+  const autoUrgent = useMemo(() => {
+    if (!form.slot.date || !form.slot.start) return false;
+    const startsAt = new Date(`${form.slot.date}T${form.slot.start}:00Z`).getTime();
+    return startsAt - Date.now() < 2 * 24 * 60 * 60 * 1000;
+  }, [form.slot.date, form.slot.start]);
+
   const canNext = useMemo(() => {
     switch (step) {
       case 0: return !!(form.company_id || form.company.trim());
@@ -221,19 +229,26 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           {boot.props.length === 0 ? (
             <div className="hint">Список оборудования пуст.</div>
           ) : (
-            boot.props.map((p: Prop) => (
-              <div key={p.id} className="prop-row">
-                <div className="prop-info">
-                  <div className="prop-name">{p.name}</div>
-                  <div className="prop-sub">доступно {p.amount} {p.unit || "шт."}</div>
+            boot.props.map((p: Prop) => {
+              const avail = p.available ?? p.amount;
+              const picked = parseInt(form.props[p.id] || "0", 10);
+              const left = avail - picked;
+              return (
+                <div key={p.id} className="prop-row">
+                  <div className="prop-info">
+                    <div className="prop-name">{p.name}</div>
+                    <div className={`prop-sub ${left <= 0 ? "out" : ""}`}>
+                      {avail <= 0 ? "нет в наличии" : `осталось ${left} из ${avail} ${p.unit || "шт."}`}
+                    </div>
+                  </div>
+                  <Stepper2
+                    value={picked}
+                    max={avail}
+                    onChange={(v) => set({ props: { ...form.props, [p.id]: String(v) } })}
+                  />
                 </div>
-                <Stepper2
-                  value={parseInt(form.props[p.id] || "0", 10)}
-                  max={p.amount}
-                  onChange={(v) => set({ props: { ...form.props, [p.id]: String(v) } })}
-                />
-              </div>
-            ))
+              );
+            })
           )}
         </Section>
       )}
@@ -255,10 +270,19 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
             <Field label="Человек на кофе-брейке"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
           )}
           <label className="check">
-            <input type="checkbox" checked={form.is_urgent} onChange={(e) => set({ is_urgent: e.target.checked })} />
+            <input
+              type="checkbox"
+              checked={form.is_urgent || autoUrgent}
+              disabled={autoUrgent}
+              onChange={(e) => set({ is_urgent: e.target.checked })}
+            />
             Срочная заявка
           </label>
-          <p className="check-hint">Заявки менее чем за 2 дня до мероприятия всегда считаются срочными.</p>
+          <p className="check-hint">
+            {autoUrgent
+              ? "Заявка автоматически срочная: до мероприятия меньше 2 дней."
+              : "Отметьте, если заявку нужно обработать в приоритете."}
+          </p>
         </Section>
       )}
 

@@ -28,7 +28,7 @@ class ZoneDayOut(BaseModel):
 
 class ZoneSlotOut(BaseModel):
     start: time
-    end: time  # latest end reachable from this start within one room's free interval
+    end: time
 
 
 class ZoneImageOut(BaseModel):
@@ -455,6 +455,9 @@ class PropOut(BaseModel):
     kind: str
     unit: str | None
     amount: int
+    # Real-time stock left after subtracting amounts held by active bookings.
+    # None in admin contexts (total stock matters there); set by the client bootstrap.
+    available: int | None = None
     description: str | None
     is_active: bool
     created_at: datetime
