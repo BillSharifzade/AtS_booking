@@ -16,7 +16,6 @@ type View = "kanban" | "table";
 const STATUS_FILTERS: { value: Status | "all"; label: string }[] = [
   { value: "all", label: "Все" },
   { value: "new", label: "Новые" },
-  { value: "processing", label: "В обработке" },
   { value: "approved", label: "Подтверждены" },
   { value: "rejected", label: "Отклонены" },
   { value: "completed", label: "Завершены" },

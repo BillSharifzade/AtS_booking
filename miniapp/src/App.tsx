@@ -26,13 +26,14 @@ type Form = {
   phone: string;
   coffee_break: boolean;
   coffee_headcount: string;
+  is_urgent: boolean;
 };
 
 const emptyForm = (name: string): Form => ({
   company_id: null, company: "", zone_id: null, attendees: "10",
   slot: { date: "", start: "", end: "" }, room_struct: null, props: {},
   event_name: "", event_type: "", description: "", contact_name: name, phone: "",
-  coffee_break: false, coffee_headcount: "",
+  coffee_break: false, coffee_headcount: "", is_urgent: false,
 });
 
 // Slots are stored as wall-clock with a trailing "Z"; format in UTC so the
@@ -111,6 +112,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       room_struct: form.room_struct,
       coffee_break: form.coffee_break,
       coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
+      is_urgent: form.is_urgent,
       starts_at: `${form.slot.date}T${form.slot.start}:00Z`,
       ends_at: `${form.slot.date}T${form.slot.end}:00Z`,
       props,
@@ -252,6 +254,11 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           {form.coffee_break && (
             <Field label="Человек на кофе-брейке"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
           )}
+          <label className="check">
+            <input type="checkbox" checked={form.is_urgent} onChange={(e) => set({ is_urgent: e.target.checked })} />
+            Срочная заявка
+          </label>
+          <p className="check-hint">Заявки менее чем за 2 дня до мероприятия всегда считаются срочными.</p>
         </Section>
       )}
 
@@ -309,6 +316,7 @@ function MyBookings() {
   const [items, setItems] = useState<ClientBooking[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [feedbackFor, setFeedbackFor] = useState<ClientBooking | null>(null);
+  const [detailFor, setDetailFor] = useState<ClientBooking | null>(null);
 
   const load = () => api.myBookings().then(setItems).catch((e) => setErr((e as Error).message));
   useEffect(() => { load(); }, []);
@@ -320,23 +328,74 @@ function MyBookings() {
   return (
     <div className="screen">
       {items.map((b) => (
-        <div key={b.id} className="booking-card">
+        <div key={b.id} className="booking-card" role="button" tabIndex={0} onClick={() => { setDetailFor(b); haptic(); }}>
           <div className="bc-head">
             <span className="bc-title">{b.event_name}</span>
             <span className={`status ${STATUS_TONE[b.status]}`}>{STATUS_LABELS[b.status]}</span>
           </div>
           <div className="bc-meta">{b.room} · {b.zone} · {b.attendees} чел.</div>
           <div className="bc-when">{fmt(b.starts_at)} — {b.ends_at.slice(11, 16)}</div>
-          {b.room_struct && <div className="bc-struct">Расстановка: {ROOM_STRUCT_LABELS[b.room_struct]}</div>}
+          {b.is_urgent && <span className="bc-urgent">Срочно</span>}
           {(b.status === "completed" || b.status === "archived") && !b.has_feedback && (
-            <button className="primary sm" onClick={() => setFeedbackFor(b)}>Оставить отзыв</button>
+            <button className="primary sm" onClick={(e) => { e.stopPropagation(); setFeedbackFor(b); }}>Оставить отзыв</button>
           )}
           {b.has_feedback && <div className="bc-fb">✓ Отзыв отправлен</div>}
         </div>
       ))}
+      {detailFor && (
+        <BookingDetail
+          booking={detailFor}
+          onClose={() => setDetailFor(null)}
+          onFeedback={() => { const b = detailFor; setDetailFor(null); setFeedbackFor(b); }}
+        />
+      )}
       {feedbackFor && (
         <FeedbackSheet booking={feedbackFor} onClose={() => setFeedbackFor(null)} onSaved={() => { setFeedbackFor(null); load(); }} />
       )}
+    </div>
+  );
+}
+
+function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBooking; onClose: () => void; onFeedback: () => void }) {
+  const canReview = (b.status === "completed" || b.status === "archived") && !b.has_feedback;
+  return (
+    <div className="sheet-overlay" onClick={onClose}>
+      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="sheet-handle" />
+        <div className="detail-head">
+          <h2>{b.event_name}</h2>
+          <span className={`status ${STATUS_TONE[b.status]}`}>{STATUS_LABELS[b.status]}</span>
+        </div>
+        <dl className="detail-list">
+          <DetailRow label="Заявка" value={`№${b.id}`} />
+          <DetailRow label="Когда" value={`${fmt(b.starts_at)} — ${b.ends_at.slice(11, 16)}`} />
+          <DetailRow label="Помещение" value={`${b.room} · зона ${b.zone}`} />
+          <DetailRow label="Участников" value={`${b.attendees} чел.`} />
+          {b.event_type && <DetailRow label="Тип" value={b.event_type} />}
+          {b.company && <DetailRow label="Компания" value={b.company} />}
+          {b.contact_name && <DetailRow label="Контакт" value={b.contact_name} />}
+          {b.phone && <DetailRow label="Телефон" value={b.phone} />}
+          {b.room_struct && <DetailRow label="Расстановка" value={ROOM_STRUCT_LABELS[b.room_struct]} />}
+          {b.coffee_break && <DetailRow label="Кофе-брейк" value={b.coffee_headcount ? `${b.coffee_headcount} чел.` : "да"} />}
+          <DetailRow label="Срочная" value={b.is_urgent ? "да" : "нет"} />
+          {b.description && <DetailRow label="Описание" value={b.description} />}
+          {b.created_at && <DetailRow label="Создана" value={fmt(b.created_at)} />}
+        </dl>
+        {b.has_feedback && <div className="bc-fb">✓ Отзыв отправлен</div>}
+        <div className="wizard-foot">
+          {canReview && <button className="primary" onClick={onFeedback}>Оставить отзыв</button>}
+          <button className="ghost" onClick={onClose}>Закрыть</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-row">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   );
 }

@@ -24,7 +24,7 @@ from app.db import Base
 
 class BookingStatus(str, enum.Enum):
     new = "new"
-    processing = "processing"
+    processing = "processing"  # DEPRECATED/retired: no longer assigned; kept for legacy rows + PG enum.
     approved = "approved"
     rejected = "rejected"
     completed = "completed"

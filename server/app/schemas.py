@@ -572,7 +572,7 @@ class ClientBookingCreate(BaseModel):
 
 
 class ClientBookingOut(BaseModel):
-    """Compact booking view for the client's "my bookings" list."""
+    """Booking view for the client's "my bookings" list and detail modal."""
     id: int
     event_name: str
     room: str
@@ -583,6 +583,16 @@ class ClientBookingOut(BaseModel):
     status: BookingStatus
     room_struct: str | None
     has_feedback: bool
+    # Detail fields (surfaced in the booking detail modal).
+    event_type: str | None = None
+    company: str | None = None
+    contact_name: str | None = None
+    phone: str | None = None
+    description: str | None = None
+    coffee_break: bool = False
+    coffee_headcount: int | None = None
+    is_urgent: bool = False
+    created_at: datetime | None = None
 
 
 class ReviewOut(BaseModel):

@@ -46,6 +46,16 @@ export type ClientBooking = {
   status: Status;
   room_struct: RoomStruct | null;
   has_feedback: boolean;
+  // Detail fields (booking detail modal).
+  event_type: string | null;
+  company: string | null;
+  contact_name: string | null;
+  phone: string | null;
+  description: string | null;
+  coffee_break: boolean;
+  coffee_headcount: number | null;
+  is_urgent: boolean;
+  created_at: string | null;
 };
 
 export type NewBooking = {
@@ -61,6 +71,7 @@ export type NewBooking = {
   room_struct: RoomStruct | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
+  is_urgent: boolean;
   starts_at: string;
   ends_at: string;
   props: { prop_id: number; amount: number }[];

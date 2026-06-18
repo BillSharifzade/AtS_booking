@@ -41,6 +41,18 @@ def _user_name(user: dict) -> str | None:
     return full or (f"@{user['username']}" if user.get("username") else None)
 
 
+def _booking_out(b: Booking, has_feedback: bool, room_name: str, zone_name: str) -> ClientBookingOut:
+    """Map a Booking to the client view (list card + detail modal share one shape)."""
+    return ClientBookingOut(
+        id=b.id, event_name=b.event_name, room=room_name, zone=zone_name,
+        starts_at=b.starts_at, ends_at=b.ends_at, attendees=b.attendees,
+        status=b.status, room_struct=b.room_struct, has_feedback=has_feedback,
+        event_type=b.event_type, company=b.company, contact_name=b.contact_name,
+        phone=b.phone, description=b.description, coffee_break=b.coffee_break,
+        coffee_headcount=b.coffee_headcount, is_urgent=b.is_urgent, created_at=b.created_at,
+    )
+
+
 async def _zones_out(session: AsyncSession) -> list[ZoneOut]:
     zones = (
         await session.execute(select(Zone).options(selectinload(Zone.rooms)).order_by(Zone.name))
@@ -153,11 +165,7 @@ async def create_booking(
         await session.rollback()
         raise HTTPException(409, str(exc))
     await notify_new(booking, room)
-    return ClientBookingOut(
-        id=booking.id, event_name=booking.event_name, room=room.name, zone=room.zone_name,
-        starts_at=booking.starts_at, ends_at=booking.ends_at, attendees=booking.attendees,
-        status=booking.status, room_struct=booking.room_struct, has_feedback=False,
-    )
+    return _booking_out(booking, False, room.name, room.zone_name)
 
 
 @router.get("/bookings", response_model=list[ClientBookingOut])
@@ -173,12 +181,10 @@ async def my_bookings(
     )
     rows = (await session.execute(stmt)).scalars().all()
     return [
-        ClientBookingOut(
-            id=b.id, event_name=b.event_name,
-            room=b.room.name if b.room else "—",
-            zone=b.room.zone.name if b.room and b.room.zone else "—",
-            starts_at=b.starts_at, ends_at=b.ends_at, attendees=b.attendees,
-            status=b.status, room_struct=b.room_struct, has_feedback=b.feedback is not None,
+        _booking_out(
+            b, b.feedback is not None,
+            b.room.name if b.room else "—",
+            b.room.zone.name if b.room and b.room.zone else "—",
         )
         for b in rows
     ]

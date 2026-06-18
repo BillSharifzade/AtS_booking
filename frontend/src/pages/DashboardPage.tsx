@@ -33,7 +33,7 @@ const PRESETS: { key: Exclude<Preset, "custom">; label: string }[] = [
   { key: "all", label: "Всё время" },
 ];
 
-const STATUS_ORDER: Status[] = ["new", "processing", "approved", "completed", "rejected", "archived"];
+const STATUS_ORDER: Status[] = ["new", "approved", "completed", "rejected", "archived"];
 
 const num = (n: number) => n.toLocaleString("ru-RU");
 

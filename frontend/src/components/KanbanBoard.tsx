@@ -20,7 +20,6 @@ import { useNotifications } from "../notifications";
 
 const COLUMNS: { status: Status; label: string }[] = [
   { status: "new", label: "Новые" },
-  { status: "processing", label: "В обработке" },
   { status: "approved", label: "Подтверждены" },
   { status: "completed", label: "Завершены" },
   { status: "rejected", label: "Отклонены" },

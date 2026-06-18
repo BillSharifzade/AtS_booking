@@ -312,7 +312,9 @@ async def create_booking(
 
 
 ALLOWED_TRANSITIONS: dict[BookingStatus, set[BookingStatus]] = {
-    BookingStatus.new: {BookingStatus.processing, BookingStatus.approved, BookingStatus.rejected},
+    # `processing` is retired: it's never a destination anymore. Kept as a SOURCE
+    # only so any legacy booking already in this status can still be resolved.
+    BookingStatus.new: {BookingStatus.approved, BookingStatus.rejected},
     BookingStatus.processing: {BookingStatus.approved, BookingStatus.rejected},
     BookingStatus.approved: {BookingStatus.completed, BookingStatus.rejected},
     BookingStatus.rejected: {BookingStatus.archived},
