@@ -16,7 +16,7 @@ type Form = {
 const EMPTY: Form = { id: null, room_id: "", starts_at: "", ends_at: "", reason: "", description: "" };
 
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 // "2026-07-01T08:00" (datetime-local, treated as UTC wall-clock) → ISO with Z.
 function toIso(local: string) { return `${local}:00Z`; }

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_user
+from app.config import local_now
 from app.db import get_session
 from app.models import Booking, BookingStatus, Company, Feedback, Room, Zone
 from app.schemas import CompanyStat, DashboardSummary, RoomStat, UpcomingItem, ZoneStat
@@ -164,7 +165,7 @@ async def summary(
     top_rooms = [RoomStat(room=r, zone=z, count=c, hours=round(float(h), 1)) for r, z, c, h in room_rows]
 
     # Next approved events from now (operational "what's next", independent of the range).
-    now = datetime.now(timezone.utc)
+    now = local_now()
     upcoming_bookings = (
         await session.execute(
             select(Booking)

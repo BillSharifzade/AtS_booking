@@ -11,8 +11,10 @@ import Stars from "../components/Stars";
 import { CardSkeleton } from "../components/Skeleton";
 import { useNotifications } from "../notifications";
 
+// Booking start/end are stored as local wall-clock labelled Z, so format in UTC
+// to show the exact time the customer picked (matches the client mini app).
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString("ru-RU");
+  return new Date(dt).toLocaleString("ru-RU", { timeZone: "UTC" });
 }
 
 export default function BookingDetailPage() {

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_admin, current_user
+from app.config import local_now
 from app.db import get_session
 from app.models import (
     Booking,
@@ -71,7 +72,7 @@ async def coffee_breaks(
     session: AsyncSession = Depends(get_session),
 ) -> list[CoffeeBreakOut]:
     # Upcoming events that need coffee-break prep (Module E), soonest first.
-    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = local_now().replace(hour=0, minute=0, second=0, microsecond=0)
     stmt = (
         select(Booking)
         .options(selectinload(Booking.room).selectinload(Room.zone), selectinload(Booking.coffee_room))

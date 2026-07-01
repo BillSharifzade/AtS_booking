@@ -38,7 +38,7 @@ const STATUS_ORDER: Status[] = ["new", "approved", "completed", "rejected", "arc
 const num = (n: number) => n.toLocaleString("ru-RU");
 
 function fmtDateTime(s: string) {
-  return new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
 function Bar({ value, max, className }: { value: number; max: number; className?: string }) {

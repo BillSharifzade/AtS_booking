@@ -24,7 +24,7 @@ const STATUS_FILTERS: { value: Status | "all"; label: string }[] = [
 
 function fmt(dt: string) {
   const d = new Date(dt);
-  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
 type FormState = {

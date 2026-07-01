@@ -17,7 +17,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...init, headers });
   if (res.status === 401) {
     clearAuth();
-    window.location.href = "/login";
+    window.location.href = `${import.meta.env.BASE_URL}login`;
     throw new Error("unauthorized");
   }
   if (!res.ok) {
@@ -487,7 +487,7 @@ export const api = {
     });
     if (res.status === 401) {
       clearAuth();
-      window.location.href = "/login";
+      window.location.href = `${import.meta.env.BASE_URL}login`;
       throw new Error("unauthorized");
     }
     if (!res.ok) throw new Error(`Не удалось сформировать отчёт (${res.status}).`);

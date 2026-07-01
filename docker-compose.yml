@@ -29,6 +29,8 @@ services:
       JWT_TTL_HOURS: ${JWT_TTL_HOURS}
       LOGIN_CODE_TTL_SECONDS: ${LOGIN_CODE_TTL_SECONDS}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Dushanbe}
+      TZ: ${APP_TIMEZONE:-Asia/Dushanbe}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     depends_on:
       db:
@@ -49,6 +51,8 @@ services:
       JWT_TTL_HOURS: ${JWT_TTL_HOURS}
       LOGIN_CODE_TTL_SECONDS: ${LOGIN_CODE_TTL_SECONDS}
       MINIAPP_URL: ${MINIAPP_URL:-}
+      APP_TIMEZONE: ${APP_TIMEZONE:-Asia/Dushanbe}
+      TZ: ${APP_TIMEZONE:-Asia/Dushanbe}
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
     depends_on:
       db:
@@ -84,6 +88,24 @@ services:
       - "5174:5174"
     volumes:
       - ./miniapp:/app
+      - /app/node_modules
+
+  # Admin panel served under the /ats_admin subpath of dchr.koinotinav.com (behind the
+  # recruitment project's Caddy edge). Like the mini app, this serves the production
+  # BUILD via `vite preview` (the dev server emits root-absolute module URLs that break
+  # under a subpath). APP_BASE sets the Vite base (and the router basename); the app's
+  # API calls go to /ats_admin/api which Caddy proxies to the api service.
+  # The existing `web` dev server on :5173 (LAN access, base "/") is left untouched.
+  webadmin:
+    build: ./frontend
+    command: sh -c "npm run build && npx vite preview --host 0.0.0.0 --port 5273 --strictPort"
+    environment:
+      APP_BASE: /ats_admin/
+      VITE_API_BASE_URL: /ats_admin/api
+    ports:
+      - "5273:5273"
+    volumes:
+      - ./frontend:/app
       - /app/node_modules
 
 volumes:

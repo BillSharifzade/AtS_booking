@@ -16,6 +16,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import local_now
 from app.models import Booking, BookingStatus, Room, RoomOfftime
 from app.services.bookings import rooms_with_capacity
 
@@ -144,20 +145,20 @@ async def zone_day_slots(
         return []
     day_start = _combine(day, time(0, 0))
     busy = await _busy_by_room(session, [r.id for r in rooms], day_start, day_start + timedelta(days=1))
-    return _day_starts(rooms, day, busy, datetime.now(timezone.utc))
+    return _day_starts(rooms, day, busy, local_now())
 
 
 async def zone_available_days(
     session: AsyncSession, zone_id: int, day_from: date, day_to: date, attendees: int
 ) -> dict[date, bool]:
     rooms = await bookable_rooms(session, zone_id, attendees)
-    today = datetime.now(timezone.utc).date()
+    today = local_now().date()
     if not rooms:
         return {d: False for d in _daterange(day_from, day_to)}
     range_start = _combine(day_from, time(0, 0))
     range_end = _combine(day_to, time(0, 0)) + timedelta(days=1)
     busy = await _busy_by_room(session, [r.id for r in rooms], range_start, range_end)
-    now = datetime.now(timezone.utc)
+    now = local_now()
     out: dict[date, bool] = {}
     for d in _daterange(day_from, day_to):
         out[d] = False if d < today else bool(_day_starts(rooms, d, busy, now))

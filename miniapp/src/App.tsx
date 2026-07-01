@@ -278,11 +278,11 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
             <>
               <Field label="Кол-во кофе-брейков"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
               <Field label="Что нужно">
-                <div className="chip-row">
-                  <button type="button" className={`chip ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>Стандартный</button>
-                  <button type="button" className={`chip ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>Другое</button>
+                <div className="seg">
+                  <button type="button" className={`seg-btn ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>Стандартный</button>
+                  <button type="button" className={`seg-btn ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>Другое</button>
                 </div>
-                <p className="check-hint">{form.coffee_type === "standard" ? "Печенье, кофе, чай, конфеты." : "Опишите, что нужно на кофе-брейке."}</p>
+                <p className="field-note">{form.coffee_type === "standard" ? "Печенье, кофе, чай, конфеты." : "Опишите, что нужно на кофе-брейке."}</p>
               </Field>
               {form.coffee_type === "other" && (
                 <Field label="Что именно"><input value={form.coffee_other} onChange={(e) => set({ coffee_other: e.target.value })} placeholder="напр. фрукты, сэндвичи…" /></Field>

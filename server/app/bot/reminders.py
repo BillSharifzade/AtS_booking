@@ -4,7 +4,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from app.config import settings
+from app.config import local_now, settings
 from app.db import SessionLocal
 from app.models import Booking, BookingStatus
 from app.services.bot_texts import refresh_cache
@@ -14,7 +14,7 @@ from app.telegram import send_document
 
 
 async def _scan_and_send() -> None:
-    now = datetime.now(timezone.utc)
+    now = local_now()
     day_lo = now + timedelta(hours=23, minutes=30)
     day_hi = now + timedelta(hours=24, minutes=30)
     hour_lo = now + timedelta(minutes=55)
@@ -66,11 +66,13 @@ async def _send_weekly_report() -> None:
 
 
 def start_scheduler() -> AsyncIOScheduler:
-    sched = AsyncIOScheduler(timezone="UTC")
+    # Cron jobs (weekly report) fire in the business timezone; interval jobs are
+    # relative so the timezone doesn't affect them.
+    sched = AsyncIOScheduler(timezone=settings.app_tz)
     sched.add_job(_scan_and_send, "interval", minutes=5, max_instances=1, coalesce=True)
     # Pick up admin edits to bot texts without restarting the bot.
     sched.add_job(refresh_cache, "interval", seconds=30, max_instances=1, coalesce=True)
-    # Weekly booking report — Monday 08:00 UTC.
+    # Weekly booking report — Monday 08:00 (business time).
     sched.add_job(
         _send_weekly_report, "cron", day_of_week="mon", hour=8, minute=0,
         max_instances=1, coalesce=True,

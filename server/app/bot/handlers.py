@@ -24,7 +24,7 @@ from sqlalchemy.orm import selectinload
 from aiogram.types import BufferedInputFile, InputMediaPhoto
 
 from app.bot import texts as t
-from app.config import settings
+from app.config import local_now, settings
 from app.db import SessionLocal
 from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage, Zone
 from app.services import availability as avail
@@ -229,7 +229,7 @@ async def get_attendees(msg: Message, state: FSMContext) -> None:
 
 
 async def _calendar_markup(session: AsyncSession, zone_id: int, attendees: int, year: int, month: int) -> InlineKeyboardMarkup:
-    today = datetime.now(timezone.utc).date()
+    today = local_now().date()
     ndays = _cal.monthrange(year, month)[1]
     first = date(year, month, 1)
     avail_map = await avail.zone_available_days(session, zone_id, first, date(year, month, ndays), attendees)
@@ -265,7 +265,7 @@ async def _calendar_markup(session: AsyncSession, zone_id: int, attendees: int, 
 
 async def _show_calendar(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
-    today = datetime.now(timezone.utc).date()
+    today = local_now().date()
     year = int(data.get("cal_year", today.year))
     month = int(data.get("cal_month", today.month))
     async with SessionLocal() as session:

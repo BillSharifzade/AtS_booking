@@ -6,6 +6,7 @@ from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import local_now
 from app.models import (
     AuditLog,
     Booking,
@@ -119,7 +120,7 @@ def validate_window(room: Room, starts_at: datetime, ends_at: datetime) -> None:
 
 
 def is_urgent(starts_at: datetime) -> bool:
-    now = datetime.now(timezone.utc)
+    now = local_now()
     if starts_at.tzinfo is None:
         starts_at = starts_at.replace(tzinfo=timezone.utc)
     return (starts_at - now) < URGENT_THRESHOLD

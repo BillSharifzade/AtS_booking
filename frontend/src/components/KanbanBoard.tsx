@@ -37,7 +37,7 @@ const TRANSITIONS: Record<Status, Status[]> = {
 };
 
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
 function CardBody({ booking, dragging }: { booking: Booking; dragging?: boolean }) {

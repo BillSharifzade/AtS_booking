@@ -6,7 +6,7 @@ import { COFFEE_STATUS_LABELS, COFFEE_STATUS_ORDER } from "../labels";
 import { TableSkeleton } from "../components/Skeleton";
 
 function fmt(dt: string) {
-  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+  return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
 const STATUS_CLASS: Record<string, string> = {
