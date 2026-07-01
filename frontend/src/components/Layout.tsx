@@ -31,7 +31,7 @@ export default function Layout() {
     <div className={`layout ${collapsed ? "collapsed" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
-          <img src="/logo.png" alt="AtS" />
+          <img src={`${import.meta.env.BASE_URL}logo.png`} alt="AtS" />
           <span className="brand-name">
             AtS
             <span className="brand-sub">Бронирование</span>

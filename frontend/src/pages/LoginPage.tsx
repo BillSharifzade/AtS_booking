@@ -50,7 +50,7 @@ export default function LoginPage() {
     <div className="auth">
       <div className="auth-card">
         <div className="auth-card-head">
-          <img className="auth-card-logo" src="/logo.png" alt="AtS" />
+          <img className="auth-card-logo" src={`${import.meta.env.BASE_URL}logo.png`} alt="AtS" />
           <span className="auth-card-brand">AtS<span>Бронирование</span></span>
         </div>
         <h1>Вход в панель</h1>
