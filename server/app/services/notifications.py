@@ -17,14 +17,14 @@ async def request_feedback(booking: Booking) -> None:
     The bot process handles the ``fb:`` callbacks and the optional follow-up comment."""
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text=str(n), callback_data=f"fb:{booking.id}:{n}") for n in range(1, 6)]
+            [InlineKeyboardButton(text=str(n), callback_data=f"fb:{booking.id}:overall:{n}") for n in range(1, 6)]
         ]
     )
     try:
         await get_bot().send_message(
             booking.customer_telegram_id,
             f"Мероприятие №{booking.id} «{esc(booking.event_name)}» завершено. Спасибо!\n"
-            "Пожалуйста, оцените его от 1 до 5:",
+            "Оцените мероприятие в целом от 1 до 5 — затем спросим про помещение, сервис и оборудование:",
             reply_markup=kb,
         )
     except TelegramAPIError:
@@ -35,16 +35,44 @@ def _fmt_dt(dt) -> str:
     return dt.strftime("%d.%m.%Y %H:%M")
 
 
+ROOM_STRUCT_LABELS = {
+    "theatre": "Театр",
+    "class": "Класс",
+    "banquet": "Банкет",
+    "u_shaped": "П-образная",
+}
+COFFEE_TYPE_LABELS = {"standard": "стандартный (печенье, кофе, чай, конфеты)", "other": "другое"}
+
+
+def _coffee_line(booking: Booking) -> str:
+    if not booking.coffee_break:
+        return "Кофе-брейк: нет"
+    parts = ["Кофе-брейк: да"]
+    if booking.coffee_headcount:
+        parts.append(f"кол-во: {booking.coffee_headcount}")
+    if booking.coffee_type:
+        label = COFFEE_TYPE_LABELS.get(booking.coffee_type, booking.coffee_type)
+        if booking.coffee_type == "other" and booking.coffee_other:
+            label = f"другое — {esc(booking.coffee_other)}"
+        parts.append(label)
+    line = "Кофе-брейк: да (" + ", ".join(parts[1:]) + ")" if len(parts) > 1 else parts[0]
+    if booking.foreign_guests:
+        line += "\nГости иностранцы: да (кофе-брейк в зале мероприятия)"
+    return line
+
+
 def _booking_card(booking: Booking, room: Room) -> str:
-    coffee = "да" if booking.coffee_break else "нет"
+    struct = ""
+    if booking.room_struct:
+        struct = f"Расстановка: {ROOM_STRUCT_LABELS.get(booking.room_struct, booking.room_struct)}\n"
     return (
         f"<b>{esc(booking.event_name)}</b>\n"
         f"Помещение: {esc(room.name)} (зона {esc(room.zone.name)})\n"
         f"Когда: {_fmt_dt(booking.starts_at)} — {_fmt_dt(booking.ends_at)}\n"
         f"Тип: {esc(booking.event_type)}\n"
         f"Участников: {booking.attendees}\n"
-        f"Кофе-брейк: {coffee}"
-        + (f" ({booking.coffee_headcount} чел.)" if booking.coffee_break and booking.coffee_headcount else "")
+        f"{struct}"
+        + _coffee_line(booking)
         + f"\nЗаказчик: {esc(booking.contact_name)}, {esc(booking.company)}\n"
         f"Телефон: {esc(booking.phone)}\n"
         f"#заявка_{booking.id}"

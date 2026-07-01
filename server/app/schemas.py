@@ -118,7 +118,11 @@ class BookingCreate(BaseModel):
     attendees: int = Field(gt=0)
     room_struct: str | None = None
     coffee_break: bool = False
+    # Number of coffee breaks during the event (legacy field name).
     coffee_headcount: int | None = Field(default=None, ge=0)
+    coffee_type: str | None = None  # "standard" | "other"
+    coffee_other: str | None = Field(default=None, max_length=500)
+    foreign_guests: bool = False
     is_urgent: bool = False
     starts_at: datetime
     ends_at: datetime
@@ -142,6 +146,9 @@ class BookingOut(BaseModel):
     room_struct: str | None
     coffee_break: bool
     coffee_headcount: int | None
+    coffee_type: str | None
+    coffee_other: str | None
+    foreign_guests: bool
     coffee_status: str
     coffee_room_id: int | None
     starts_at: datetime
@@ -213,6 +220,9 @@ class ReassignIn(BaseModel):
 # Allowed coffee-break prep states (Module E).
 COFFEE_STATUSES = {"pending", "ready", "served", "not_required"}
 
+# What's served at the coffee break: a fixed standard set, or free-text "other".
+COFFEE_TYPES = {"standard", "other"}
+
 
 class CoffeeUpdate(BaseModel):
     # Both optional; use model_fields_set to tell "unset" from "explicit null".
@@ -229,6 +239,9 @@ class CoffeeBreakOut(BaseModel):
     room: str
     attendees: int
     coffee_headcount: int | None
+    coffee_type: str | None
+    coffee_other: str | None
+    foreign_guests: bool
     status: BookingStatus
     coffee_status: str
     coffee_room_id: int | None
@@ -567,7 +580,11 @@ class ClientBookingCreate(BaseModel):
     attendees: int = Field(gt=0)
     room_struct: str | None = None
     coffee_break: bool = False
+    # Number of coffee breaks during the event (legacy field name).
     coffee_headcount: int | None = Field(default=None, ge=0)
+    coffee_type: str | None = None  # "standard" | "other"
+    coffee_other: str | None = Field(default=None, max_length=500)
+    foreign_guests: bool = False
     is_urgent: bool = False
     starts_at: datetime
     ends_at: datetime
@@ -594,6 +611,9 @@ class ClientBookingOut(BaseModel):
     description: str | None = None
     coffee_break: bool = False
     coffee_headcount: int | None = None
+    coffee_type: str | None = None
+    coffee_other: str | None = None
+    foreign_guests: bool = False
     is_urgent: bool = False
     created_at: datetime | None = None
 

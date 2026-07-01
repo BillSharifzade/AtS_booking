@@ -26,6 +26,9 @@ URGENT_THRESHOLD = timedelta(days=2)
 # layout builder can extend it. Mirrors schemas.ROOM_STRUCTS.
 ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
 
+# What can be served at a coffee break. Mirrors schemas.COFFEE_TYPES.
+COFFEE_TYPES = {"standard", "other"}
+
 # Statuses that "hold" a resource (room slot / prop stock).
 ACTIVE_STATUSES = [BookingStatus.new, BookingStatus.processing, BookingStatus.approved]
 
@@ -193,21 +196,6 @@ async def rooms_with_capacity(
     return out
 
 
-async def zone_coffee_capacity(session: AsyncSession, zone_id: int) -> int:
-    """Total capacity of the active coffee-break rooms in a zone (Module E).
-    Coffee-break rooms are logistics spaces; their summed capacity bounds how many
-    guests a booking's coffee-break can serve."""
-    return (
-        await session.execute(
-            select(func.coalesce(func.sum(Room.capacity), 0)).where(
-                Room.zone_id == zone_id,
-                Room.is_coffee_break.is_(True),
-                Room.is_active.is_(True),
-            )
-        )
-    ).scalar_one()
-
-
 async def create_booking(
     session: AsyncSession,
     *,
@@ -225,6 +213,9 @@ async def create_booking(
     attendees: int,
     coffee_break: bool,
     coffee_headcount: int | None,
+    coffee_type: str | None = None,
+    coffee_other: str | None = None,
+    foreign_guests: bool = False,
     urgent: bool = False,
     room_struct: str | None = None,
     company_id: int | None = None,
@@ -238,18 +229,19 @@ async def create_booking(
             names = "; ".join(f"«{r.name}» (зона {r.zone.name}, до {r.capacity} чел.)" for r in alts[:5])
             raise BookingError(f"{head} Подходящие помещения: {names}.")
         raise BookingError(f"{head} Нет свободных помещений с нужной вместимостью на это время.")
-    if coffee_break and coffee_headcount:
-        cap = await zone_coffee_capacity(session, room.zone_id)
-        if cap <= 0:
-            raise BookingError(
-                f"В зоне «{room.zone.name}» нет помещения для кофе-брейка. "
-                "Уберите кофе-брейк или выберите помещение в другой зоне."
-            )
-        if coffee_headcount > cap:
-            raise BookingError(
-                f"Кофе-брейк в зоне «{room.zone.name}» рассчитан максимум на {cap} чел., "
-                f"а указано {coffee_headcount}. Уменьшите число участников кофе-брейка."
-            )
+    # Coffee break: a dedicated coffee-break room is no longer required (an admin can
+    # assign one later, and foreign-guest breaks are served in the event room itself).
+    # `coffee_headcount` now = the number of coffee breaks during the event.
+    coffee_type_val: str | None = None
+    coffee_other_val: str | None = None
+    if coffee_break:
+        coffee_type_val = coffee_type or "standard"
+        if coffee_type_val not in COFFEE_TYPES:
+            raise BookingError("Неизвестный тип кофе-брейка.")
+        if coffee_type_val == "other":
+            coffee_other_val = (coffee_other or "").strip() or None
+            if coffee_other_val is None:
+                raise BookingError("Опишите, что нужно на кофе-брейке.")
     if await has_conflict(session, room.id, starts_at, ends_at):
         raise BookingError("Слот уже занят.")
     off = await has_offtime(session, room.id, starts_at, ends_at)
@@ -276,6 +268,9 @@ async def create_booking(
         room_struct=room_struct,
         coffee_break=coffee_break,
         coffee_headcount=coffee_headcount if coffee_break else None,
+        coffee_type=coffee_type_val,
+        coffee_other=coffee_other_val,
+        foreign_guests=foreign_guests if coffee_break else False,
         starts_at=starts_at,
         ends_at=ends_at,
         status=BookingStatus.new,

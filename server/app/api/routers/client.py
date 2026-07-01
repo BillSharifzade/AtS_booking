@@ -49,7 +49,9 @@ def _booking_out(b: Booking, has_feedback: bool, room_name: str, zone_name: str)
         status=b.status, room_struct=b.room_struct, has_feedback=has_feedback,
         event_type=b.event_type, company=b.company, contact_name=b.contact_name,
         phone=b.phone, description=b.description, coffee_break=b.coffee_break,
-        coffee_headcount=b.coffee_headcount, is_urgent=b.is_urgent, created_at=b.created_at,
+        coffee_headcount=b.coffee_headcount, coffee_type=b.coffee_type,
+        coffee_other=b.coffee_other, foreign_guests=b.foreign_guests,
+        is_urgent=b.is_urgent, created_at=b.created_at,
     )
 
 
@@ -171,6 +173,9 @@ async def create_booking(
             attendees=payload.attendees,
             coffee_break=payload.coffee_break,
             coffee_headcount=payload.coffee_headcount,
+            coffee_type=payload.coffee_type,
+            coffee_other=payload.coffee_other,
+            foreign_guests=payload.foreign_guests,
             urgent=payload.is_urgent,
             room_struct=payload.room_struct,
             company_id=payload.company_id,

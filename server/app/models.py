@@ -123,7 +123,15 @@ class Booking(Base):
     room_struct: Mapped[str | None] = mapped_column(String(40))
 
     coffee_break: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # NB: despite the legacy column name, this now holds the NUMBER OF COFFEE BREAKS
+    # requested during the event (not a head count). Only meaningful when coffee_break.
     coffee_headcount: Mapped[int | None] = mapped_column(Integer)
+    # What's served: "standard" (печенье/кофе/чай/конфеты) or "other" (free-text below).
+    coffee_type: Mapped[str | None] = mapped_column(String(20))
+    coffee_other: Mapped[str | None] = mapped_column(Text)
+    # Foreign guests → the coffee break is served in the event room itself, so no
+    # separate coffee-break room is assigned.
+    foreign_guests: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Coffee-break preparation (Module E): lifecycle + which coffee-break room serves it.
     # Values: pending / ready / served / not_required. Only meaningful when coffee_break.
     coffee_status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)

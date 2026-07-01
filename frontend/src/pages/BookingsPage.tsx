@@ -46,6 +46,9 @@ type FormState = {
   attendees: string;
   coffee_break: boolean;
   coffee_headcount: string;
+  coffee_type: string;
+  coffee_other: string;
+  foreign_guests: boolean;
   is_urgent: boolean;
 };
 
@@ -68,6 +71,9 @@ const EMPTY_FORM: FormState = {
   attendees: "1",
   coffee_break: false,
   coffee_headcount: "",
+  coffee_type: "standard",
+  coffee_other: "",
+  foreign_guests: false,
   is_urgent: false,
 };
 
@@ -148,6 +154,9 @@ export default function BookingsPage() {
         attendees: parseInt(form.attendees, 10),
         coffee_break: form.coffee_break,
         coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
+        coffee_type: form.coffee_break ? form.coffee_type : null,
+        coffee_other: form.coffee_break && form.coffee_type === "other" ? form.coffee_other.trim() || null : null,
+        foreign_guests: form.coffee_break ? form.foreign_guests : false,
         is_urgent: form.is_urgent,
         starts_at: `${form.date}T${form.start}:00Z`,
         ends_at: `${form.date}T${form.end}:00Z`,
@@ -351,19 +360,39 @@ export default function BookingsPage() {
                   </div>
                   <div className="field"><label>Telegram @username (необязательно)</label>
                     <input value={form.customer_username} onChange={(e) => setForm({ ...form, customer_username: e.target.value })} /></div>
-                  <div className="row2">
-                    <div className="field" style={{ alignSelf: "end" }}>
-                      <label>
-                        <input type="checkbox" style={{ width: "auto", marginRight: 8 }}
-                          checked={form.coffee_break} onChange={(e) => setForm({ ...form, coffee_break: e.target.checked })} />
-                        Кофе-брейк
-                      </label>
-                    </div>
-                    {form.coffee_break && (
-                      <div className="field"><label>Человек на кофе-брейке</label>
-                        <input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => setForm({ ...form, coffee_headcount: e.target.value })} /></div>
-                    )}
+                  <div className="field" style={{ marginBottom: form.coffee_break ? 8 : undefined }}>
+                    <label>
+                      <input type="checkbox" style={{ width: "auto", marginRight: 8 }}
+                        checked={form.coffee_break} onChange={(e) => setForm({ ...form, coffee_break: e.target.checked })} />
+                      Кофе-брейк
+                    </label>
                   </div>
+                  {form.coffee_break && (
+                    <>
+                      <div className="row2">
+                        <div className="field"><label>Кол-во кофе-брейков</label>
+                          <input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => setForm({ ...form, coffee_headcount: e.target.value })} /></div>
+                        <div className="field"><label>Что нужно</label>
+                          <select value={form.coffee_type} onChange={(e) => setForm({ ...form, coffee_type: e.target.value })}>
+                            <option value="standard">Стандартный (печенье, кофе, чай, конфеты)</option>
+                            <option value="other">Другое</option>
+                          </select>
+                        </div>
+                      </div>
+                      {form.coffee_type === "other" && (
+                        <div className="field"><label>Опишите, что нужно</label>
+                          <input value={form.coffee_other} onChange={(e) => setForm({ ...form, coffee_other: e.target.value })} placeholder="напр. фрукты, сэндвичи…" /></div>
+                      )}
+                      <div className="field">
+                        <label>
+                          <input type="checkbox" style={{ width: "auto", marginRight: 8 }}
+                            checked={form.foreign_guests} onChange={(e) => setForm({ ...form, foreign_guests: e.target.checked })} />
+                          Гости иностранцы
+                        </label>
+                        <span className="field-hint">Кофе-брейк организуется прямо в зале мероприятия — отдельное помещение не требуется.</span>
+                      </div>
+                    </>
+                  )}
                   <div className="field">
                     <label>
                       <input type="checkbox" style={{ width: "auto", marginRight: 8 }}

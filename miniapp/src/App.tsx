@@ -26,6 +26,9 @@ type Form = {
   phone: string;
   coffee_break: boolean;
   coffee_headcount: string;
+  coffee_type: "standard" | "other";
+  coffee_other: string;
+  foreign_guests: boolean;
   is_urgent: boolean;
 };
 
@@ -33,7 +36,8 @@ const emptyForm = (name: string): Form => ({
   company_id: null, company: "", zone_id: null, attendees: "10",
   slot: { date: "", start: "", end: "" }, room_struct: null, props: {},
   event_name: "", event_type: "", description: "", contact_name: name, phone: "",
-  coffee_break: false, coffee_headcount: "", is_urgent: false,
+  coffee_break: false, coffee_headcount: "", coffee_type: "standard", coffee_other: "", foreign_guests: false,
+  is_urgent: false,
 });
 
 // Slots are stored as wall-clock with a trailing "Z"; format in UTC so the
@@ -56,7 +60,7 @@ export default function App() {
   if (!boot) return <div className="screen"><div className="loader">Загрузка…</div></div>;
 
   return (
-    <div className="app">
+    <div className={`app${isTelegram ? "" : " mode-desktop"}`}>
       <header className="topbar">
         <div className="brand-row">
           <div className="brand"><img className="brand-logo" src={logoUrl} alt="AtS" /><span>Бронирование</span></div>
@@ -97,7 +101,8 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       case 1: return !!(form.zone_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
       case 2: return true; // room_struct optional
       case 3: return true; // props optional
-      case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.contact_name.trim() && form.phone.trim() && (!form.coffee_break || form.coffee_headcount));
+      case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.contact_name.trim() && form.phone.trim() &&
+        (!form.coffee_break || (form.coffee_headcount && (form.coffee_type !== "other" || form.coffee_other.trim()))));
       default: return true;
     }
   }, [step, form, attendeesNum]);
@@ -120,6 +125,9 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       room_struct: form.room_struct,
       coffee_break: form.coffee_break,
       coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
+      coffee_type: form.coffee_break ? form.coffee_type : null,
+      coffee_other: form.coffee_break && form.coffee_type === "other" ? form.coffee_other.trim() || null : null,
+      foreign_guests: form.coffee_break ? form.foreign_guests : false,
       is_urgent: form.is_urgent,
       starts_at: `${form.slot.date}T${form.slot.start}:00Z`,
       ends_at: `${form.slot.date}T${form.slot.end}:00Z`,
@@ -267,7 +275,24 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
             Нужен кофе-брейк
           </label>
           {form.coffee_break && (
-            <Field label="Человек на кофе-брейке"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
+            <>
+              <Field label="Кол-во кофе-брейков"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
+              <Field label="Что нужно">
+                <div className="chip-row">
+                  <button type="button" className={`chip ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>Стандартный</button>
+                  <button type="button" className={`chip ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>Другое</button>
+                </div>
+                <p className="check-hint">{form.coffee_type === "standard" ? "Печенье, кофе, чай, конфеты." : "Опишите, что нужно на кофе-брейке."}</p>
+              </Field>
+              {form.coffee_type === "other" && (
+                <Field label="Что именно"><input value={form.coffee_other} onChange={(e) => set({ coffee_other: e.target.value })} placeholder="напр. фрукты, сэндвичи…" /></Field>
+              )}
+              <label className="check">
+                <input type="checkbox" checked={form.foreign_guests} onChange={(e) => set({ foreign_guests: e.target.checked })} />
+                Гости иностранцы
+              </label>
+              <p className="check-hint">Если да — кофе-брейк организуем прямо в зале мероприятия, отдельное помещение не нужно.</p>
+            </>
           )}
           <label className="check">
             <input
@@ -351,6 +376,7 @@ function MyBookings() {
 
   return (
     <div className="screen">
+      <div className="booking-grid">
       {items.map((b) => (
         <div key={b.id} className="booking-card" role="button" tabIndex={0} onClick={() => { setDetailFor(b); haptic(); }}>
           <div className="bc-head">
@@ -366,6 +392,7 @@ function MyBookings() {
           {b.has_feedback && <div className="bc-fb">✓ Отзыв отправлен</div>}
         </div>
       ))}
+      </div>
       {detailFor && (
         <BookingDetail
           booking={detailFor}
@@ -400,7 +427,18 @@ function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBoo
           {b.contact_name && <DetailRow label="Контакт" value={b.contact_name} />}
           {b.phone && <DetailRow label="Телефон" value={b.phone} />}
           {b.room_struct && <DetailRow label="Расстановка" value={ROOM_STRUCT_LABELS[b.room_struct]} />}
-          {b.coffee_break && <DetailRow label="Кофе-брейк" value={b.coffee_headcount ? `${b.coffee_headcount} чел.` : "да"} />}
+          {b.coffee_break && (
+            <DetailRow
+              label="Кофе-брейк"
+              value={
+                [
+                  b.coffee_headcount ? `${b.coffee_headcount} шт.` : null,
+                  b.coffee_type === "other" ? (b.coffee_other || "другое") : "стандартный",
+                  b.foreign_guests ? "в зале (гости иностранцы)" : null,
+                ].filter(Boolean).join(" · ")
+              }
+            />
+          )}
           <DetailRow label="Срочная" value={b.is_urgent ? "да" : "нет"} />
           {b.description && <DetailRow label="Описание" value={b.description} />}
           {b.created_at && <DetailRow label="Создана" value={fmt(b.created_at)} />}

@@ -54,6 +54,9 @@ export type ClientBooking = {
   description: string | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
+  coffee_type: string | null;
+  coffee_other: string | null;
+  foreign_guests: boolean;
   is_urgent: boolean;
   created_at: string | null;
 };
@@ -71,6 +74,9 @@ export type NewBooking = {
   room_struct: RoomStruct | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
+  coffee_type: string | null;
+  coffee_other: string | null;
+  foreign_guests: boolean;
   is_urgent: boolean;
   starts_at: string;
   ends_at: string;

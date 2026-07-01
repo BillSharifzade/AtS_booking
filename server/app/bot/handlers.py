@@ -19,16 +19,17 @@ from aiogram.types import (
 )
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from aiogram.types import BufferedInputFile, InputMediaPhoto
 
 from app.bot import texts as t
 from app.config import settings
 from app.db import SessionLocal
-from app.models import Booking, ChatMessage, Feedback, Room, RoomImage, Zone
+from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage, Zone
 from app.services import availability as avail
 from app.services import bookings as svc
-from app.services.notifications import notify_new
+from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
 from app.services.ratelimit import allow
 from app.services.reports import build_bookings_workbook, report_filename
 from app.services.users import upsert_user
@@ -61,6 +62,9 @@ class Booking_FSM(StatesGroup):
     description = State()
     coffee = State()
     coffee_count = State()
+    coffee_type = State()
+    coffee_other = State()
+    foreign_guests = State()
     urgent = State()
     confirm = State()
     # Error-recovery: edit one field then return to confirm (data["mode"]=="edit").
@@ -482,7 +486,9 @@ async def get_coffee(msg: Message, state: FSMContext) -> None:
         await state.set_state(Booking_FSM.coffee_count)
         await msg.answer(t.ENTER_COFFEE_HEADCOUNT, reply_markup=ReplyKeyboardRemove())
     else:
-        await state.update_data(coffee=False, coffee_count=None)
+        await state.update_data(
+            coffee=False, coffee_count=None, coffee_type=None, coffee_other=None, foreign_guests=False
+        )
         await _ask_urgent(msg, state)
 
 
@@ -490,12 +496,64 @@ async def get_coffee(msg: Message, state: FSMContext) -> None:
 async def get_coffee_count(msg: Message, state: FSMContext) -> None:
     try:
         n = int(msg.text.strip())
-        if n < 0:
+        if n < 1:
             raise ValueError
     except ValueError:
         await msg.answer(t.INVALID_NUMBER)
         return
     await state.update_data(coffee_count=n)
+    await _ask_coffee_type(msg, state)
+
+
+def _coffee_type_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="стандарт"), KeyboardButton(text="другое")]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+async def _ask_coffee_type(msg: Message, state: FSMContext) -> None:
+    await state.set_state(Booking_FSM.coffee_type)
+    await msg.answer(t.COFFEE_TYPE_QUESTION, reply_markup=_coffee_type_kb())
+
+
+@router.message(Booking_FSM.coffee_type)
+async def get_coffee_type(msg: Message, state: FSMContext) -> None:
+    ans = msg.text.strip().lower()
+    if ans.startswith("стандарт"):
+        await state.update_data(coffee_type="standard", coffee_other=None)
+        await _ask_foreign(msg, state)
+    elif ans.startswith("друг"):
+        await state.update_data(coffee_type="other")
+        await state.set_state(Booking_FSM.coffee_other)
+        await msg.answer(t.ENTER_COFFEE_OTHER, reply_markup=ReplyKeyboardRemove())
+    else:
+        await msg.answer(t.COFFEE_TYPE_QUESTION, reply_markup=_coffee_type_kb())
+
+
+@router.message(Booking_FSM.coffee_other)
+async def get_coffee_other(msg: Message, state: FSMContext) -> None:
+    text = (msg.text or "").strip()
+    if not text:
+        await msg.answer(t.ENTER_COFFEE_OTHER)
+        return
+    await state.update_data(coffee_other=text)
+    await _ask_foreign(msg, state)
+
+
+async def _ask_foreign(msg: Message, state: FSMContext) -> None:
+    await state.set_state(Booking_FSM.foreign_guests)
+    await msg.answer(t.FOREIGN_GUESTS_QUESTION, reply_markup=_yesno_kb())
+
+
+@router.message(Booking_FSM.foreign_guests)
+async def get_foreign_guests(msg: Message, state: FSMContext) -> None:
+    ans = msg.text.strip().lower()
+    if ans not in ("да", "нет"):
+        await msg.answer(t.INVALID_YESNO)
+        return
+    await state.update_data(foreign_guests=ans == "да")
     await _ask_urgent(msg, state)
 
 
@@ -514,6 +572,26 @@ async def get_urgent(msg: Message, state: FSMContext) -> None:
     await _show_confirm(msg, state)
 
 
+_COFFEE_TYPE_RU = {"standard": "стандарт (печенье, кофе, чай, конфеты)", "other": "другое"}
+
+
+def _coffee_summary(data: dict) -> str:
+    if not data.get("coffee"):
+        return "Кофе-брейк: нет"
+    bits: list[str] = []
+    if data.get("coffee_count"):
+        bits.append(f"кол-во: {data['coffee_count']}")
+    ctype = data.get("coffee_type") or "standard"
+    if ctype == "other" and data.get("coffee_other"):
+        bits.append(f"другое — {esc(data['coffee_other'])}")
+    else:
+        bits.append(_COFFEE_TYPE_RU.get(ctype, ctype))
+    line = "Кофе-брейк: да (" + ", ".join(bits) + ")"
+    if data.get("foreign_guests"):
+        line += "\nГости иностранцы: да (кофе-брейк в зале)"
+    return line
+
+
 async def _show_confirm(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with SessionLocal() as session:
@@ -526,8 +604,7 @@ async def _show_confirm(msg: Message, state: FSMContext) -> None:
         f"Название: {esc(data['event_name'])}\n"
         f"Описание: {esc(data.get('description')) or '—'}\n"
         f"Участников: {data['attendees']}\n"
-        f"Кофе-брейк: {'да' if data['coffee'] else 'нет'}"
-        + (f" ({data['coffee_count']} чел.)" if data['coffee'] else "")
+        + _coffee_summary(data)
         + f"\nСрочная: {'да' if data.get('urgent') else 'нет'}"
         + f"\nКомпания: {esc(data['company'])}\n"
         f"Контакт: {esc(data['contact_name'])}, {esc(data['phone'])}"
@@ -580,6 +657,9 @@ async def confirm(msg: Message, state: FSMContext) -> None:
                 attendees=data["attendees"],
                 coffee_break=data["coffee"],
                 coffee_headcount=data.get("coffee_count"),
+                coffee_type=data.get("coffee_type"),
+                coffee_other=data.get("coffee_other"),
+                foreign_guests=data.get("foreign_guests", False),
                 urgent=data.get("urgent", False),
             )
             await upsert_user(
@@ -707,10 +787,28 @@ async def edit_coffee(msg: Message, state: FSMContext) -> None:
         return
     # 0 means "no coffee-break" — drop the flag so the booking can pass validation.
     if n == 0:
-        await state.update_data(coffee=False, coffee_count=None)
+        await state.update_data(
+            coffee=False, coffee_count=None, coffee_type=None, coffee_other=None, foreign_guests=False
+        )
     else:
         await state.update_data(coffee=True, coffee_count=n)
     await _show_confirm(msg, state)
+
+
+def _my_coffee_line(b: Booking) -> str:
+    if not b.coffee_break:
+        return ""
+    bits: list[str] = []
+    if b.coffee_headcount:
+        bits.append(f"кол-во {b.coffee_headcount}")
+    ctype = b.coffee_type or "standard"
+    if ctype == "other" and b.coffee_other:
+        bits.append(f"другое — {esc(b.coffee_other)}")
+    else:
+        bits.append(_COFFEE_TYPE_RU.get(ctype, ctype))
+    if b.foreign_guests:
+        bits.append("в зале, гости иностранцы")
+    return "  кофе-брейк: " + ", ".join(bits)
 
 
 @router.message(Command("my"))
@@ -718,32 +816,73 @@ async def my(msg: Message) -> None:
     async with SessionLocal() as session:
         rows = (
             await session.execute(
-                select(Booking, Room)
-                .join(Room)
+                select(Booking)
+                .options(
+                    selectinload(Booking.room),
+                    selectinload(Booking.props).selectinload(BookingProp.prop),
+                )
                 .where(Booking.customer_telegram_id == msg.from_user.id)
                 .order_by(Booking.starts_at.desc())
                 .limit(20)
             )
-        ).all()
+        ).scalars().all()
     if not rows:
         await msg.answer(t.NO_BOOKINGS)
         return
     lines = []
-    for b, r in rows:
-        lines.append(
+    for b in rows:
+        r = b.room
+        block = (
             f"№{b.id} — {esc(b.event_name)}\n"
-            f"  {esc(r.name)}, {b.starts_at.strftime('%d.%m %H:%M')}–{b.ends_at.strftime('%H:%M')}\n"
+            f"  {esc(r.name) if r else '—'}, {b.starts_at.strftime('%d.%m %H:%M')}–{b.ends_at.strftime('%H:%M')}\n"
             f"  статус: {b.status.value}"
         )
+        extra: list[str] = []
+        if b.room_struct:
+            extra.append(f"  расстановка: {ROOM_STRUCT_LABELS.get(b.room_struct, b.room_struct)}")
+        coffee = _my_coffee_line(b)
+        if coffee:
+            extra.append(coffee)
+        if b.props:
+            extra.append(
+                "  оборудование: "
+                + ", ".join(f"{esc(bp.prop.name)}×{bp.amount}" for bp in b.props)
+            )
+        if extra:
+            block += "\n" + "\n".join(extra)
+        lines.append(block)
     await msg.answer("\n\n".join(lines))
 
 
-# ---------- Post-event feedback (Module F) ----------
+# ---------- Post-event feedback (Module F, #12: aspect sub-ratings) ----------
+# Rating is collected in order: overall → room → service → props → comment.
+_FB_NEXT = {"overall": "room", "room": "service", "service": "props", "props": None}
+_FB_QUESTION = {
+    "overall": "мероприятие в целом",
+    "room": "помещение",
+    "service": "сервис",
+    "props": "оборудование",
+}
+
+
+def _fb_kb(bid: int, aspect: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=str(n), callback_data=f"fb:{bid}:{aspect}:{n}") for n in range(1, 6)]
+        ]
+    )
+
+
 @router.callback_query(F.data.startswith("fb:"))
 async def feedback_rate(cq: CallbackQuery, state: FSMContext) -> None:
-    _, bid_s, n_s = cq.data.split(":")
+    parts = cq.data.split(":")
+    # Back-compat: legacy "fb:{bid}:{n}" is treated as the overall rating.
+    if len(parts) == 3:
+        aspect, (bid_s, n_s) = "overall", (parts[1], parts[2])
+    else:
+        _, bid_s, aspect, n_s = parts
     bid, rating = int(bid_s), int(n_s)
-    if not 1 <= rating <= 5:
+    if aspect not in _FB_NEXT or not 1 <= rating <= 5:
         await cq.answer()
         return
     async with SessionLocal() as session:
@@ -756,14 +895,32 @@ async def feedback_rate(cq: CallbackQuery, state: FSMContext) -> None:
             await session.execute(select(Feedback).where(Feedback.booking_id == bid))
         ).scalar_one_or_none()
         if fb is None:
-            session.add(Feedback(booking_id=bid, rating=rating))
-        else:
+            # rating is NOT NULL; seed it with this tap (overwritten below if aspect==overall).
+            fb = Feedback(booking_id=bid, rating=rating)
+            session.add(fb)
+        if aspect == "overall":
             fb.rating = rating
+        elif aspect == "room":
+            fb.room_rating = rating
+        elif aspect == "service":
+            fb.service_rating = rating
+        elif aspect == "props":
+            fb.props_rating = rating
         await session.commit()
-    await cq.answer("Спасибо за оценку!")
+    await cq.answer("Принято!")
+    nxt = _FB_NEXT[aspect]
+    if nxt is not None:
+        try:
+            await cq.message.edit_text(
+                f"Оцените {_FB_QUESTION[nxt]} от 1 до 5:", reply_markup=_fb_kb(bid, nxt)
+            )
+        except Exception:  # noqa: BLE001 - message edit is best-effort
+            pass
+        return
+    # All aspects rated → ask for the optional free-text comment.
     try:
         await cq.message.edit_text(
-            f"Ваша оценка мероприятия №{bid}: {'⭐' * rating} ({rating}/5)\n"
+            f"Спасибо за оценки по заявке №{bid}!\n"
             "Напишите короткий комментарий или отправьте /skip."
         )
     except Exception:  # noqa: BLE001 - message edit is best-effort

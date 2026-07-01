@@ -97,10 +97,23 @@ def _style_header(ws, ncols: int) -> None:
     ws.auto_filter.ref = f"A1:{get_column_letter(ncols)}1"
 
 
+_COFFEE_TYPE_RU = {"standard": "стандартный", "other": "другое"}
+
+
 def _coffee_text(b: Booking) -> str:
     if not b.coffee_break:
         return "Нет"
-    return f"Да ({b.coffee_headcount} чел.)" if b.coffee_headcount else "Да"
+    bits: list[str] = []
+    if b.coffee_headcount:
+        bits.append(f"{b.coffee_headcount} кофе-брейк.")
+    if b.coffee_type:
+        t = _COFFEE_TYPE_RU.get(b.coffee_type, b.coffee_type)
+        if b.coffee_type == "other" and b.coffee_other:
+            t = f"другое: {b.coffee_other}"
+        bits.append(t)
+    if b.foreign_guests:
+        bits.append("гости иностранцы")
+    return f"Да ({'; '.join(bits)})" if bits else "Да"
 
 
 def _result_text(b: Booking) -> str:

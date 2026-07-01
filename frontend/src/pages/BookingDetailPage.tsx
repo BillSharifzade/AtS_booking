@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, BookingWithRoom, Room } from "../api";
 import { isAdmin } from "../auth";
-import { COFFEE_STATUS_LABELS, COFFEE_STATUS_ORDER, RESULT_OUTCOME_LABELS, RESULT_OUTCOME_ORDER, ROOM_STRUCT_LABELS } from "../labels";
+import { COFFEE_STATUS_LABELS, COFFEE_STATUS_ORDER, COFFEE_TYPE_LABELS, RESULT_OUTCOME_LABELS, RESULT_OUTCOME_ORDER, ROOM_STRUCT_LABELS } from "../labels";
 import StatusBadge from "../components/StatusBadge";
 import UserName from "../components/UserName";
 import ChatModal from "../components/ChatModal";
@@ -113,7 +113,7 @@ export default function BookingDetailPage() {
             )}
             <div className="k">Кофе-брейк</div>
             <div>
-              {b.coffee_break ? `да${b.coffee_headcount ? ` (${b.coffee_headcount} чел.)` : ""}` : "нет"}
+              {b.coffee_break ? `да${b.coffee_headcount ? ` · ${b.coffee_headcount} шт.` : ""}` : "нет"}
             </div>
           </div>
         </div>
@@ -156,8 +156,16 @@ export default function BookingDetailPage() {
         <div className="card">
           <h3>Кофе-брейк</h3>
           <div className="kv">
-            <div className="k">Человек на кофе-брейке</div>
+            <div className="k">Кол-во кофе-брейков</div>
             <div>{b.coffee_headcount ?? "—"}</div>
+            <div className="k">Что нужно</div>
+            <div>
+              {b.coffee_type === "other"
+                ? (b.coffee_other || "Другое")
+                : (COFFEE_TYPE_LABELS[b.coffee_type || "standard"] || "—")}
+            </div>
+            <div className="k">Гости иностранцы</div>
+            <div>{b.foreign_guests ? "да — кофе-брейк в зале мероприятия" : "нет"}</div>
             <div className="k">Статус подготовки</div>
             <div>
               {admin ? (
@@ -175,7 +183,9 @@ export default function BookingDetailPage() {
             </div>
             <div className="k">Помещение кофе-брейка</div>
             <div>
-              {admin ? (
+              {b.foreign_guests ? (
+                "в зале мероприятия (гости иностранцы)"
+              ) : admin ? (
                 <select
                   value={b.coffee_room_id ?? ""}
                   onChange={(e) =>
@@ -193,7 +203,7 @@ export default function BookingDetailPage() {
               )}
             </div>
           </div>
-          {admin && coffeeRooms.length === 0 && (
+          {admin && !b.foreign_guests && coffeeRooms.length === 0 && (
             <span className="field-hint">Нет помещений с кофе-брейком. Отметьте помещение как «кофе-брейк» в разделе «Помещения».</span>
           )}
         </div>

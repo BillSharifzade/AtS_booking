@@ -160,7 +160,7 @@ export default function DashboardPage() {
 
           <div className="stat-row-mini">
             <span><b>{num(data.total_attendees)}</b> участников суммарно</span>
-            <span><b>{num(data.coffee_breaks)}</b> с кофе-брейком ({num(data.coffee_headcount)} чел.)</span>
+            <span><b>{num(data.coffee_breaks)}</b> с кофе-брейком (всего {num(data.coffee_headcount)} кофе-брейков)</span>
             <span><b>{data.approval_rate != null ? `${Math.round(data.approval_rate * 100)}%` : "—"}</b> одобрено</span>
             <span><b>{data.completion_rate != null ? `${Math.round(data.completion_rate * 100)}%` : "—"}</b> проведено</span>
             <span><b>{data.avg_lead_hours != null ? `${Math.round(data.avg_lead_hours)} ч` : "—"}</b> средний срок до события</span>

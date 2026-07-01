@@ -326,3 +326,51 @@ button.ghost:active { background: var(--bg); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ---- Desktop / laptop layout (browser only; Telegram stays phone-shaped) ---- */
+@media (min-width: 860px) {
+  .mode-desktop { --dw: 960px; }
+  /* Constrain the sticky header's content to the same width as the body. */
+  .mode-desktop .topbar { padding: 18px 32px; }
+  .mode-desktop .brand-row,
+  .mode-desktop .tabs { max-width: var(--dw); margin-left: auto; margin-right: auto; }
+  .mode-desktop .brand { font-size: 18px; }
+  .mode-desktop .tabs { max-width: 380px; margin-right: 0; }
+
+  /* Wider content column, and float the step content into a card. */
+  .mode-desktop .screen { max-width: var(--dw); padding: 34px 32px 132px; }
+  .mode-desktop .step-body {
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 30px 34px; box-shadow: var(--shadow-md);
+  }
+  .mode-desktop .steps { max-width: 720px; margin: 0 auto 26px; }
+  .mode-desktop .section-title { font-size: 24px; }
+
+  /* Denser grids now that there's room. */
+  .mode-desktop .company-grid { grid-template-columns: repeat(4, 1fr); }
+  .mode-desktop .struct-list { grid-template-columns: repeat(4, 1fr); }
+  .mode-desktop .booking-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .mode-desktop .booking-grid .booking-card { margin-bottom: 0; }
+
+  /* Footer bar spans the same column and sits flush-right like a form action bar. */
+  .mode-desktop .wizard-foot {
+    max-width: var(--dw); justify-content: flex-end;
+    background: linear-gradient(to top, var(--bg) 70%, rgba(245, 246, 249, 0));
+  }
+  .mode-desktop .wizard-foot button.primary { flex: 0 0 auto; min-width: 220px; }
+
+  /* Detail/feedback sheets render as a centred modal instead of a bottom sheet. */
+  .mode-desktop .sheet-overlay { align-items: center; }
+  .mode-desktop .sheet {
+    max-width: 620px; border-radius: 20px; max-height: 86vh;
+    padding: 10px 26px 26px; animation: pop 0.28s var(--spring);
+  }
+  .mode-desktop .success-card { max-width: 620px; margin: 0 auto; }
+
+  /* Pointer affordances: cards lift on hover rather than press-scale. */
+  .mode-desktop .booking-card { cursor: pointer; }
+  .mode-desktop .booking-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+  .mode-desktop .company-card:hover,
+  .mode-desktop .struct:hover,
+  .mode-desktop .chip:hover { border-color: var(--border-strong); }
+}

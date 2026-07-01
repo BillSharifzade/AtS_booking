@@ -17,6 +17,12 @@ export const COFFEE_STATUS_LABELS: Record<string, string> = {
 };
 export const COFFEE_STATUS_ORDER = ["pending", "ready", "served", "not_required"];
 
+// What's served at the coffee break (#коф).
+export const COFFEE_TYPE_LABELS: Record<string, string> = {
+  standard: "Стандартный (печенье, кофе, чай, конфеты)",
+  other: "Другое",
+};
+
 // Seating arrangements ("Расстановка", #3).
 export const ROOM_STRUCT_LABELS: Record<string, string> = {
   theatre: "Театр",

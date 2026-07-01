@@ -60,7 +60,7 @@ export default function CoffeePage() {
               <th>Когда</th>
               <th>Мероприятие</th>
               <th>Зал · зона</th>
-              <th>Чел.</th>
+              <th>Кол-во</th>
               <th>Статус</th>
               <th>Помещение кофе-брейка</th>
             </tr>
@@ -71,7 +71,7 @@ export default function CoffeePage() {
                 <td onClick={() => nav(`/bookings/${c.id}`)}>{fmt(c.starts_at)}</td>
                 <td onClick={() => nav(`/bookings/${c.id}`)}>№{c.id} · {c.event_name}</td>
                 <td onClick={() => nav(`/bookings/${c.id}`)}>{c.room} · {c.zone}</td>
-                <td onClick={() => nav(`/bookings/${c.id}`)}>{c.coffee_headcount ?? c.attendees}</td>
+                <td onClick={() => nav(`/bookings/${c.id}`)}>{c.coffee_headcount ?? "—"}</td>
                 <td>
                   {admin ? (
                     <select
@@ -90,7 +90,9 @@ export default function CoffeePage() {
                   )}
                 </td>
                 <td>
-                  {admin ? (
+                  {c.foreign_guests ? (
+                    <span className="badge zone">в зале (иностранцы)</span>
+                  ) : admin ? (
                     <select
                       value={c.coffee_room_id ?? ""}
                       disabled={busy}
