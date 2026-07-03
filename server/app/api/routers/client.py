@@ -13,7 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_customer
 from app.db import get_session
-from app.models import Booking, BookingProp, BookingStatus, Company, Feedback, Prop, Room, Zone
+from app.models import Booking, BookingProp, BookingStatus, Company, Feedback, Prop, Room, RoomImage, Zone
 from app.schemas import (
     ClientBookingCreate,
     ClientBookingOut,
@@ -23,6 +23,7 @@ from app.schemas import (
     FeedbackCreate,
     PropOut,
     ZoneDayOut,
+    ZoneImageOut,
     ZoneOut,
     ZoneSlotOut,
 )
@@ -60,13 +61,31 @@ async def _zones_out(session: AsyncSession) -> list[ZoneOut]:
     zones = (
         await session.execute(select(Zone).options(selectinload(Zone.rooms)).order_by(Zone.name))
     ).scalars().all()
+    # Photo references for all bookable rooms, grouped by zone (ids only — the raw
+    # bytes are served publicly, so the client builds the URL and lazy-loads them).
+    img_rows = (
+        await session.execute(
+            select(RoomImage.room_id, RoomImage.id, Room.name, Room.zone_id)
+            .join(Room, Room.id == RoomImage.room_id)
+            .where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
+            .order_by(Room.name, RoomImage.sort_order, RoomImage.id)
+        )
+    ).all()
+    photos_by_zone: dict[int, list[ZoneImageOut]] = {}
+    for rid, iid, rname, zid in img_rows:
+        photos_by_zone.setdefault(zid, []).append(
+            ZoneImageOut(room_id=rid, image_id=iid, room_name=rname)
+        )
     out: list[ZoneOut] = []
     for z in zones:
         bookable = [r for r in z.rooms if r.is_active and not r.is_coffee_break]
         # Only surface zones a customer can actually book into.
         if bookable:
-            out.append(ZoneOut(id=z.id, name=z.name, room_count=len(bookable),
-                               total_capacity=sum(r.capacity for r in bookable)))
+            out.append(ZoneOut(
+                id=z.id, name=z.name, room_count=len(bookable),
+                total_capacity=sum(r.capacity for r in bookable),
+                photos=photos_by_zone.get(z.id, [])[:8],
+            ))
     return out
 
 

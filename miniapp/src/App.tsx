@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, RoomStruct } from "./api";
+import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
 import { GRADES, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
@@ -54,6 +54,14 @@ const emptyForm = (name: string): Form => ({
 // instead of being shifted into the browser's local timezone.
 function fmt(dt: string) {
   return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+}
+
+// Russian plural for "зал" (room): 1 зал, 2 зала, 5 залов.
+function roomsWord(n: number): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "зал";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "зала";
+  return "залов";
 }
 
 export default function App() {
@@ -212,10 +220,26 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         <Section title="Зал, участники и время">
           <Field label="Зона">
             {boot.zones.length > 0 ? (
-              <div className="chip-row">
+              <div className="zone-grid">
                 {boot.zones.map((z) => (
-                  <button key={z.id} className={`chip ${form.zone_id === z.id ? "on" : ""}`} onClick={() => set({ zone_id: z.id, slot: { date: "", start: "", end: "" } })}>
-                    {z.name} <span className="chip-sub">до {z.total_capacity}</span>
+                  <button
+                    key={z.id}
+                    className={`zone-card ${form.zone_id === z.id ? "on" : ""}`}
+                    onClick={() => { set({ zone_id: z.id, slot: { date: "", start: "", end: "" } }); haptic(); }}
+                  >
+                    <div className="zone-photo">
+                      {z.photos.length > 0 ? (
+                        <img src={roomImageUrl(z.photos[0].room_id, z.photos[0].image_id)} alt={z.photos[0].room_name} loading="lazy" />
+                      ) : (
+                        <span className="zone-photo-empty">Без фото</span>
+                      )}
+                      {z.photos.length > 1 && <span className="zone-photo-count">{z.photos.length} фото</span>}
+                      {form.zone_id === z.id && <span className="zone-check">✓</span>}
+                    </div>
+                    <div className="zone-info">
+                      <span className="zone-name">{z.name}</span>
+                      <span className="zone-cap">до {z.total_capacity} чел. · {z.room_count} {roomsWord(z.room_count)}</span>
+                    </div>
                   </button>
                 ))}
               </div>

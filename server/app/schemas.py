@@ -14,11 +14,21 @@ class ZoneUpdate(BaseModel):
     name: str = Field(min_length=1, max_length=80)
 
 
+class ZoneImageOut(BaseModel):
+    room_id: int
+    image_id: int
+    room_name: str
+
+
 class ZoneOut(BaseModel):
     id: int
     name: str
     room_count: int
     total_capacity: int
+    # Interior photos of the zone's bookable rooms (references only — the raw bytes
+    # are served publicly at /rooms/{room_id}/images/{image_id}/raw). Populated for
+    # the client mini app so zones render with photos, empty in admin listings.
+    photos: list[ZoneImageOut] = []
 
 
 class ZoneDayOut(BaseModel):
@@ -29,12 +39,6 @@ class ZoneDayOut(BaseModel):
 class ZoneSlotOut(BaseModel):
     start: time
     end: time
-
-
-class ZoneImageOut(BaseModel):
-    room_id: int
-    image_id: int
-    room_name: str
 
 
 class RoomImageOut(BaseModel):

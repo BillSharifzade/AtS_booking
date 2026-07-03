@@ -28,7 +28,8 @@ export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped";
 export type Status = "new" | "processing" | "approved" | "rejected" | "completed" | "archived";
 
 export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; has_logo: boolean };
-export type Zone = { id: number; name: string; room_count: number; total_capacity: number };
+export type ZonePhoto = { room_id: number; image_id: number; room_name: string };
+export type Zone = { id: number; name: string; room_count: number; total_capacity: number; photos: ZonePhoto[] };
 export type Prop = { id: number; name: string; kind: "tech" | "office"; unit: string | null; amount: number; available: number | null; description: string | null };
 export type ClientUser = { telegram_id: number; name: string | null; username: string | null };
 export type Bootstrap = { user: ClientUser; companies: Company[]; zones: Zone[]; props: Prop[] };
@@ -91,6 +92,7 @@ export type NewBooking = {
 };
 
 export const companyLogoUrl = (id: number) => `${BASE}/companies/${id}/logo`;
+export const roomImageUrl = (roomId: number, imageId: number) => `${BASE}/rooms/${roomId}/images/${imageId}/raw`;
 
 export const api = {
   bootstrap: () => request<Bootstrap>("/client/bootstrap"),
