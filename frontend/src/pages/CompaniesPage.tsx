@@ -4,6 +4,14 @@ import { api, Company, companyLogoUrl } from "../api";
 import { isAdmin } from "../auth";
 import { CardSkeleton } from "../components/Skeleton";
 
+// Ensure an outbound company link is absolute. A scheme-less value like "example.com"
+// would otherwise resolve relative to the current page (e.g. /ats_admin/example.com)
+// because the admin panel is served under a subpath.
+function externalUrl(url: string): string {
+  const u = url.trim();
+  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+}
+
 type Form = {
   id: number | null;
   name: string;
@@ -113,7 +121,7 @@ export default function CompaniesPage() {
               </div>
               <div className="ec-meta">
                 <span className={`badge ${c.is_active ? "active" : "inactive"}`}>{c.is_active ? "активна" : "скрыта"}</span>
-                {c.website_url && <a href={c.website_url} target="_blank" rel="noreferrer">сайт ↗</a>}
+                {c.website_url && <a href={externalUrl(c.website_url)} target="_blank" rel="noreferrer noopener">сайт ↗</a>}
               </div>
             </div>
           ))}
