@@ -180,6 +180,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
     <div className="screen wizard">
       <Stepper step={step} />
 
+      <div className="wiz-main">
       <div className="step-body" key={step}>
       {step === 0 && (
         <Section title="Кто бронирует?">
@@ -278,21 +279,25 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
 
       {step === 4 && (
         <Section title="Детали мероприятия">
-          <Field label="Название"><input value={form.event_name} onChange={(e) => set({ event_name: e.target.value })} placeholder="напр. Стратегическая сессия" /></Field>
-          <Field label="Тип"><input value={form.event_type} onChange={(e) => set({ event_type: e.target.value })} placeholder="совещание, тренинг…" /></Field>
+          <div className="grid2">
+            <Field label="Название"><input value={form.event_name} onChange={(e) => set({ event_name: e.target.value })} placeholder="напр. Стратегическая сессия" /></Field>
+            <Field label="Тип"><input value={form.event_type} onChange={(e) => set({ event_type: e.target.value })} placeholder="совещание, тренинг…" /></Field>
+          </div>
+          <div className="grid2">
+            <Field label="Цель бронирования"><input value={form.aim} onChange={(e) => set({ aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></Field>
+            <Field label="Грейд">
+              <select value={form.grade} onChange={(e) => set({ grade: e.target.value })}>
+                <option value="">— выберите грейд —</option>
+                {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+              </select>
+            </Field>
+          </div>
           <Field label="Описание (необязательно)"><textarea rows={2} value={form.description} onChange={(e) => set({ description: e.target.value })} /></Field>
-          <Field label="Цель бронирования"><input value={form.aim} onChange={(e) => set({ aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></Field>
-          <Field label="Грейд">
-            <select value={form.grade} onChange={(e) => set({ grade: e.target.value })}>
-              <option value="">— выберите грейд —</option>
-              {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </Field>
           <Field label="Дополнительные услуги (необязательно)">
             <textarea rows={2} value={form.extra_services} onChange={(e) => set({ extra_services: e.target.value })}
               placeholder="напр. расстановка мебели, техническая поддержка на месте, другое" />
           </Field>
-          <div className="row2">
+          <div className="grid2">
             <Field label="Контактное лицо"><input value={form.contact_name} onChange={(e) => set({ contact_name: e.target.value })} /></Field>
             <Field label="Телефон"><input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+7…" /></Field>
           </div>
@@ -372,6 +377,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         {step > 0 && <button className="ghost" disabled={busy} onClick={() => setStep((s) => s - 1)}>Назад</button>}
         {step < LAST_STEP && <button className="primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>Далее</button>}
         {step === LAST_STEP && <button className="primary" disabled={!canNext || busy} onClick={submit}>{busy ? "Отправка…" : "Отправить заявку"}</button>}
+      </div>
       </div>
     </div>
   );
