@@ -199,6 +199,10 @@ async def create_booking_endpoint(
             urgent=payload.is_urgent,
             room_struct=payload.room_struct,
             company_id=payload.company_id,
+            aim=payload.aim,
+            grade=payload.grade,
+            extra_services=payload.extra_services,
+            privacy_accepted=payload.privacy_accepted,
             props=[(p.prop_id, p.amount) for p in payload.props],
         )
         await svc.audit(session, admin_id, "booking.create", "booking", booking.id, f"«{booking.event_name}», {room.name}")

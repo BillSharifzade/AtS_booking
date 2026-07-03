@@ -116,6 +116,13 @@ class Booking(Base):
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     event_name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    # Purpose of the booking ("Цель бронирования", free text) and the requester's
+    # grade ("Грейд", one of a fixed set — validated in the service layer / schemas).
+    aim: Mapped[str | None] = mapped_column(String(300))
+    grade: Mapped[str | None] = mapped_column(String(60))
+    # Extra services the client needs on-site ("Дополнительные услуги", free text —
+    # e.g. расстановка мебели, техническая поддержка на месте, …).
+    extra_services: Mapped[str | None] = mapped_column(Text)
     attendees: Mapped[int] = mapped_column(Integer, nullable=False)
     # Seating arrangement ("Расстановка"): theatre / class / banquet / u_shaped.
     # Stored as a plain string (not an enum) so a dynamic layout builder can
@@ -147,6 +154,9 @@ class Booking(Base):
         index=True,
     )
     is_urgent: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Customer confirmed they read the participation rules / recommendations before
+    # submitting (privacy-policy-style acknowledgement; client app + website only).
+    privacy_accepted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     reject_reason: Mapped[str | None] = mapped_column(Text)
     # Result captured at completion (Module F): outcome (held/partial/cancelled) + note.
     result_outcome: Mapped[str | None] = mapped_column(String(20))

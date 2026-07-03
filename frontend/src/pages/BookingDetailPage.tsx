@@ -100,6 +100,9 @@ export default function BookingDetailPage() {
             <div className="k">Название</div><div>{b.event_name}</div>
             <div className="k">Тип</div><div>{b.event_type}</div>
             <div className="k">Описание</div><div>{b.description || "—"}</div>
+            <div className="k">Цель бронирования</div><div>{b.aim || "—"}</div>
+            <div className="k">Грейд</div><div>{b.grade || "—"}</div>
+            <div className="k">Доп. услуги</div><div>{b.extra_services || "—"}</div>
             <div className="k">Помещение</div><div>{b.room.name} (зона {b.room.zone_name})</div>
             <div className="k">Начало</div><div>{fmt(b.starts_at)}</div>
             <div className="k">Окончание</div><div>{fmt(b.ends_at)}</div>
@@ -143,6 +146,8 @@ export default function BookingDetailPage() {
             <div className="k">Компания</div><div>{b.company}</div>
             <div className="k">Контакт</div><div>{b.contact_name}</div>
             <div className="k">Телефон</div><div>{b.phone}</div>
+            <div className="k">Ознакомлен с правилами</div>
+            <div>{b.privacy_accepted ? "да" : "—"}</div>
             <div className="k">Telegram</div>
             <div>
               <UserName

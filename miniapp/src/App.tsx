@@ -2,14 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, RoomStruct } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { GRADES, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
 
 type Tab = "new" | "my";
 
-const STEPS = ["Компания", "Зал и дата", "Расстановка", "Оборудование", "Детали", "Готово"] as const;
+const STEPS = ["Компания", "Зал и дата", "Расстановка", "Оборудование", "Детали", "Согласие", "Готово"] as const;
+// Index of the last input step (the consent step, where the form is submitted).
+const LAST_STEP = STEPS.length - 2;
 
 type Form = {
   company_id: number | null;
@@ -22,6 +24,9 @@ type Form = {
   event_name: string;
   event_type: string;
   description: string;
+  aim: string;
+  grade: string;
+  extra_services: string;
   contact_name: string;
   phone: string;
   coffee_break: boolean;
@@ -30,14 +35,18 @@ type Form = {
   coffee_other: string;
   foreign_guests: boolean;
   is_urgent: boolean;
+  // Participation-rules acknowledgement (#4): one checkbox per required document.
+  agree: boolean[];
 };
 
 const emptyForm = (name: string): Form => ({
   company_id: null, company: "", zone_id: null, attendees: "10",
   slot: { date: "", start: "", end: "" }, room_struct: null, props: {},
-  event_name: "", event_type: "", description: "", contact_name: name, phone: "",
+  event_name: "", event_type: "", description: "", aim: "", grade: "", extra_services: "",
+  contact_name: name, phone: "",
   coffee_break: false, coffee_headcount: "", coffee_type: "standard", coffee_other: "", foreign_guests: false,
   is_urgent: false,
+  agree: RULES_LINKS.map(() => false),
 });
 
 // Slots are stored as wall-clock with a trailing "Z"; format in UTC so the
@@ -101,8 +110,10 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       case 1: return !!(form.zone_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
       case 2: return true; // room_struct optional
       case 3: return true; // props optional
-      case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.contact_name.trim() && form.phone.trim() &&
+      case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.aim.trim() && form.grade &&
+        form.contact_name.trim() && form.phone.trim() &&
         (!form.coffee_break || (form.coffee_headcount && (form.coffee_type !== "other" || form.coffee_other.trim()))));
+      case 5: return form.agree.every(Boolean); // must acknowledge every document
       default: return true;
     }
   }, [step, form, attendeesNum]);
@@ -121,6 +132,10 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       event_type: form.event_type.trim(),
       event_name: form.event_name.trim(),
       description: form.description.trim() || null,
+      aim: form.aim.trim() || null,
+      grade: form.grade || null,
+      extra_services: form.extra_services.trim() || null,
+      privacy_accepted: form.agree.every(Boolean),
       attendees: attendeesNum,
       room_struct: form.room_struct,
       coffee_break: form.coffee_break,
@@ -162,7 +177,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   }
 
   return (
-    <div className="screen">
+    <div className="screen wizard">
       <Stepper step={step} />
 
       <div className="step-body" key={step}>
@@ -266,6 +281,17 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           <Field label="Название"><input value={form.event_name} onChange={(e) => set({ event_name: e.target.value })} placeholder="напр. Стратегическая сессия" /></Field>
           <Field label="Тип"><input value={form.event_type} onChange={(e) => set({ event_type: e.target.value })} placeholder="совещание, тренинг…" /></Field>
           <Field label="Описание (необязательно)"><textarea rows={2} value={form.description} onChange={(e) => set({ description: e.target.value })} /></Field>
+          <Field label="Цель бронирования"><input value={form.aim} onChange={(e) => set({ aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></Field>
+          <Field label="Грейд">
+            <select value={form.grade} onChange={(e) => set({ grade: e.target.value })}>
+              <option value="">— выберите грейд —</option>
+              {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
+          </Field>
+          <Field label="Дополнительные услуги (необязательно)">
+            <textarea rows={2} value={form.extra_services} onChange={(e) => set({ extra_services: e.target.value })}
+              placeholder="напр. расстановка мебели, техническая поддержка на месте, другое" />
+          </Field>
           <div className="row2">
             <Field label="Контактное лицо"><input value={form.contact_name} onChange={(e) => set({ contact_name: e.target.value })} /></Field>
             <Field label="Телефон"><input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+7…" /></Field>
@@ -311,14 +337,41 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         </Section>
       )}
 
+      {step === 5 && (
+        <Section title="Ознакомление с правилами">
+          <p className="rules-intro">
+            {RULES_INTRO}{" "}
+            <a href={RULES_RECOMMENDATIONS_URL} target="_blank" rel="noreferrer">рекомендациями</a>.
+          </p>
+          <div className="consent-list">
+            {RULES_LINKS.map((doc, i) => (
+              <label key={i} className="consent-item">
+                <input
+                  type="checkbox"
+                  checked={form.agree[i]}
+                  onChange={(e) => set({ agree: form.agree.map((v, j) => (j === i ? e.target.checked : v)) })}
+                />
+                <span>
+                  {doc.label}
+                  {doc.url && doc.url !== "#" && (
+                    <> — <a href={doc.url} target="_blank" rel="noreferrer">открыть файл</a></>
+                  )}
+                </span>
+              </label>
+            ))}
+          </div>
+          <p className="check-hint">Чтобы отправить заявку, подтвердите ознакомление со всеми пунктами.</p>
+        </Section>
+      )}
+
       </div>
 
       {err && <div className="error-box">{err}</div>}
 
       <div className="wizard-foot">
         {step > 0 && <button className="ghost" disabled={busy} onClick={() => setStep((s) => s - 1)}>Назад</button>}
-        {step < 4 && <button className="primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>Далее</button>}
-        {step === 4 && <button className="primary" disabled={!canNext || busy} onClick={submit}>{busy ? "Отправка…" : "Отправить заявку"}</button>}
+        {step < LAST_STEP && <button className="primary" disabled={!canNext} onClick={() => setStep((s) => s + 1)}>Далее</button>}
+        {step === LAST_STEP && <button className="primary" disabled={!canNext || busy} onClick={submit}>{busy ? "Отправка…" : "Отправить заявку"}</button>}
       </div>
     </div>
   );
@@ -327,7 +380,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
 function Stepper({ step }: { step: number }) {
   return (
     <div className="steps">
-      {STEPS.slice(0, 5).map((s, i) => (
+      {STEPS.slice(0, LAST_STEP + 1).map((s, i) => (
         <div key={s} className={`step ${i === step ? "current" : ""} ${i < step ? "done" : ""}`}>
           <span className="step-dot">{i < step ? "✓" : i + 1}</span>
           <span className="step-name">{s}</span>
@@ -423,6 +476,9 @@ function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBoo
           <DetailRow label="Помещение" value={`${b.room} · зона ${b.zone}`} />
           <DetailRow label="Участников" value={`${b.attendees} чел.`} />
           {b.event_type && <DetailRow label="Тип" value={b.event_type} />}
+          {b.aim && <DetailRow label="Цель" value={b.aim} />}
+          {b.grade && <DetailRow label="Грейд" value={b.grade} />}
+          {b.extra_services && <DetailRow label="Доп. услуги" value={b.extra_services} />}
           {b.company && <DetailRow label="Компания" value={b.company} />}
           {b.contact_name && <DetailRow label="Контакт" value={b.contact_name} />}
           {b.phone && <DetailRow label="Телефон" value={b.phone} />}

@@ -38,6 +38,16 @@ export const ROOM_STRUCT_HINTS: Record<string, string> = {
 };
 export const ROOM_STRUCT_ORDER = ["theatre", "class", "banquet", "u_shaped"];
 
+// Requester grade ("Грейд", #1) — fixed dropdown, order mirrors the backend GRADES.
+export const GRADES = [
+  "Стажер",
+  "Специалист",
+  "Ведущий специалист",
+  "Главный специалист",
+  "Руководитель отдела",
+  "Руководитель департамента",
+];
+
 export const RESULT_OUTCOME_LABELS: Record<string, string> = {
   held: "Состоялось",
   partial: "Состоялось частично",

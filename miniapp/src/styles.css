@@ -334,41 +334,80 @@ button.ghost:active { background: var(--bg); }
 .sheet .field { margin-top: 6px; }
 .sheet .wizard-foot { position: static; padding: 18px 0 0; background: none; max-width: none; }
 
+/* ---- Consent / participation rules (#4) ---- */
+.rules-intro { color: var(--ink-2); font-size: 14px; line-height: 1.55; margin: 0 0 18px; }
+.rules-intro a { color: var(--accent-2); font-weight: 650; }
+.consent-list { display: flex; flex-direction: column; gap: 12px; }
+.consent-item {
+  display: flex; align-items: flex-start; gap: 12px; padding: 14px 15px; cursor: pointer;
+  background: var(--panel); border: 1.5px solid var(--border); border-radius: var(--radius);
+  font-size: 14px; line-height: 1.4; box-shadow: var(--shadow-sm);
+  transition: border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+.consent-item:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.consent-item input { width: 21px; height: 21px; margin-top: 1px; flex: 0 0 auto; accent-color: var(--accent); }
+.consent-item a { color: var(--accent-2); font-weight: 650; white-space: nowrap; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 
 /* ---- Desktop / laptop layout (browser only; Telegram stays phone-shaped) ---- */
 @media (min-width: 860px) {
-  .mode-desktop { --dw: 960px; }
-  /* Constrain the sticky header's content to the same width as the body. */
+  .mode-desktop { --dw: 1080px; --rail: 248px; }
+
+  /* Header: brand left, tabs right, constrained to the content width. */
   .mode-desktop .topbar { padding: 18px 32px; }
   .mode-desktop .brand-row,
   .mode-desktop .tabs { max-width: var(--dw); margin-left: auto; margin-right: auto; }
   .mode-desktop .brand { font-size: 18px; }
   .mode-desktop .tabs { max-width: 380px; margin-right: 0; }
 
-  /* Wider content column, and float the step content into a card. */
-  .mode-desktop .screen { max-width: var(--dw); padding: 34px 32px 132px; }
-  .mode-desktop .step-body {
-    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
-    padding: 30px 34px; box-shadow: var(--shadow-md);
-  }
-  .mode-desktop .steps { max-width: 720px; margin: 0 auto 26px; }
+  .mode-desktop .screen { max-width: var(--dw); padding: 34px 32px 40px; }
   .mode-desktop .section-title { font-size: 24px; }
 
-  /* Denser grids now that there's room. */
-  .mode-desktop .company-grid { grid-template-columns: repeat(4, 1fr); }
-  .mode-desktop .struct-list { grid-template-columns: repeat(4, 1fr); }
+  /* --- Two-pane wizard: left step rail + right content card --- */
+  .mode-desktop .screen.wizard {
+    display: grid; grid-template-columns: var(--rail) minmax(0, 1fr);
+    column-gap: 34px; align-items: start; padding-bottom: 120px;
+  }
+  /* Vertical step rail (replaces the phone-style horizontal stepper). */
+  .mode-desktop .screen.wizard .steps {
+    grid-column: 1; grid-row: 1 / -1; position: sticky; top: 104px;
+    flex-direction: column; align-items: stretch; gap: 2px; margin: 0;
+    background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 12px; box-shadow: var(--shadow-sm);
+  }
+  .mode-desktop .screen.wizard .step {
+    flex: none; flex-direction: row; align-items: center; justify-content: flex-start;
+    gap: 12px; padding: 10px 11px; border-radius: var(--radius-sm);
+    transition: background 0.16s var(--ease);
+  }
+  .mode-desktop .screen.wizard .step.current { background: var(--accent-soft); }
+  .mode-desktop .screen.wizard .step::before { display: none; } /* no horizontal connectors */
+  .mode-desktop .screen.wizard .step-dot { width: 26px; height: 26px; }
+  .mode-desktop .screen.wizard .step-name { font-size: 13.5px; text-align: left; }
+
+  .mode-desktop .screen.wizard .step-body {
+    grid-column: 2; background: var(--panel); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 30px 34px; box-shadow: var(--shadow-md);
+  }
+  .mode-desktop .screen.wizard .error-box { grid-column: 2; }
+
+  /* Denser grids now that there's a full content column. */
+  .mode-desktop .company-grid { grid-template-columns: repeat(3, 1fr); }
+  .mode-desktop .struct-list { grid-template-columns: repeat(2, 1fr); }
   .mode-desktop .booking-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .mode-desktop .booking-grid .booking-card { margin-bottom: 0; }
 
-  /* Footer bar spans the same column and sits flush-right like a form action bar. */
-  .mode-desktop .wizard-foot {
+  /* Footer action bar: aligned under the content column, buttons flush right.
+     Scoped to the wizard screen so the feedback sheet's inline footer is untouched. */
+  .mode-desktop .screen.wizard .wizard-foot {
     max-width: var(--dw); justify-content: flex-end;
+    padding-left: calc(var(--rail) + 34px + 32px); padding-right: 32px;
     background: linear-gradient(to top, var(--bg) 70%, rgba(245, 246, 249, 0));
   }
-  .mode-desktop .wizard-foot button.primary { flex: 0 0 auto; min-width: 220px; }
+  .mode-desktop .screen.wizard .wizard-foot button.primary { flex: 0 0 auto; min-width: 220px; }
 
   /* Detail/feedback sheets render as a centred modal instead of a bottom sheet. */
   .mode-desktop .sheet-overlay { align-items: center; }
@@ -378,10 +417,16 @@ button.ghost:active { background: var(--bg); }
   }
   .mode-desktop .success-card { max-width: 620px; margin: 0 auto; }
 
-  /* Pointer affordances: cards lift on hover rather than press-scale. */
+  /* Pointer affordances: lift/darken on hover instead of press-scale. */
   .mode-desktop .booking-card { cursor: pointer; }
   .mode-desktop .booking-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
   .mode-desktop .company-card:hover,
   .mode-desktop .struct:hover,
+  .mode-desktop .consent-item:hover,
   .mode-desktop .chip:hover { border-color: var(--border-strong); }
+}
+
+/* Wider desktop: allow the field grids to breathe into two columns. */
+@media (min-width: 1180px) {
+  .mode-desktop .screen.wizard .step-body .row2 { gap: 16px; }
 }

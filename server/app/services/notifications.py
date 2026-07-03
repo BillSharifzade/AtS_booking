@@ -65,6 +65,13 @@ def _booking_card(booking: Booking, room: Room) -> str:
     struct = ""
     if booking.room_struct:
         struct = f"Расстановка: {ROOM_STRUCT_LABELS.get(booking.room_struct, booking.room_struct)}\n"
+    extras = ""
+    if booking.grade:
+        extras += f"Грейд: {esc(booking.grade)}\n"
+    if booking.aim:
+        extras += f"Цель: {esc(booking.aim)}\n"
+    if booking.extra_services:
+        extras += f"Доп. услуги: {esc(booking.extra_services)}\n"
     return (
         f"<b>{esc(booking.event_name)}</b>\n"
         f"Помещение: {esc(room.name)} (зона {esc(room.zone.name)})\n"
@@ -72,6 +79,7 @@ def _booking_card(booking: Booking, room: Room) -> str:
         f"Тип: {esc(booking.event_type)}\n"
         f"Участников: {booking.attendees}\n"
         f"{struct}"
+        f"{extras}"
         + _coffee_line(booking)
         + f"\nЗаказчик: {esc(booking.contact_name)}, {esc(booking.company)}\n"
         f"Телефон: {esc(booking.phone)}\n"

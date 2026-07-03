@@ -8,6 +8,7 @@ import { TableSkeleton } from "../components/Skeleton";
 import KanbanBoard from "../components/KanbanBoard";
 import DateTimePicker from "../components/DateTimePicker";
 import RoomStructPicker from "../components/RoomStructPicker";
+import { GRADES } from "../labels";
 import { useNotifications } from "../notifications";
 
 const VIEW_KEY = "ats_bookings_view";
@@ -43,6 +44,9 @@ type FormState = {
   event_type: string;
   event_name: string;
   description: string;
+  aim: string;
+  grade: string;
+  extra_services: string;
   attendees: string;
   coffee_break: boolean;
   coffee_headcount: string;
@@ -68,6 +72,9 @@ const EMPTY_FORM: FormState = {
   event_type: "",
   event_name: "",
   description: "",
+  aim: "",
+  grade: "",
+  extra_services: "",
   attendees: "1",
   coffee_break: false,
   coffee_headcount: "",
@@ -151,6 +158,9 @@ export default function BookingsPage() {
         event_type: form.event_type.trim(),
         event_name: form.event_name.trim(),
         description: form.description.trim() || null,
+        aim: form.aim.trim() || null,
+        grade: form.grade || null,
+        extra_services: form.extra_services.trim() || null,
         attendees: parseInt(form.attendees, 10),
         coffee_break: form.coffee_break,
         coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
@@ -306,6 +316,20 @@ export default function BookingsPage() {
                   </div>
                   <div className="field"><label>Описание</label>
                     <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
+
+                  <div className="row2">
+                    <div className="field"><label>Цель бронирования</label>
+                      <input value={form.aim} onChange={(e) => setForm({ ...form, aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></div>
+                    <div className="field"><label>Грейд</label>
+                      <select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })}>
+                        <option value="">— не указан —</option>
+                        {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="field"><label>Дополнительные услуги</label>
+                    <textarea rows={2} value={form.extra_services} onChange={(e) => setForm({ ...form, extra_services: e.target.value })}
+                      placeholder="напр. расстановка мебели, техническая поддержка на месте, другое" /></div>
 
                   <div className="field">
                     <label>Расстановка</label>

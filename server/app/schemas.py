@@ -96,6 +96,16 @@ class RoomOut(BaseModel):
 # dynamic layout builder can add custom keys without a schema change.
 ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
 
+# Requester grade ("Грейд") — a fixed dropdown. Order defines how the UIs list it.
+GRADES = [
+    "Стажер",
+    "Специалист",
+    "Ведущий специалист",
+    "Главный специалист",
+    "Руководитель отдела",
+    "Руководитель департамента",
+]
+
 
 class PropRequest(BaseModel):
     prop_id: int
@@ -115,6 +125,9 @@ class BookingCreate(BaseModel):
     event_type: str
     event_name: str
     description: str | None = None
+    aim: str | None = Field(default=None, max_length=300)
+    grade: str | None = None
+    extra_services: str | None = None
     attendees: int = Field(gt=0)
     room_struct: str | None = None
     coffee_break: bool = False
@@ -124,6 +137,7 @@ class BookingCreate(BaseModel):
     coffee_other: str | None = Field(default=None, max_length=500)
     foreign_guests: bool = False
     is_urgent: bool = False
+    privacy_accepted: bool = False
     starts_at: datetime
     ends_at: datetime
     props: list[PropRequest] = []
@@ -142,6 +156,9 @@ class BookingOut(BaseModel):
     event_type: str
     event_name: str
     description: str | None
+    aim: str | None
+    grade: str | None
+    extra_services: str | None
     attendees: int
     room_struct: str | None
     coffee_break: bool
@@ -155,6 +172,7 @@ class BookingOut(BaseModel):
     ends_at: datetime
     status: BookingStatus
     is_urgent: bool
+    privacy_accepted: bool
     reject_reason: str | None
     result_outcome: str | None
     result_note: str | None
@@ -577,6 +595,9 @@ class ClientBookingCreate(BaseModel):
     event_type: str = Field(min_length=1, max_length=100)
     event_name: str = Field(min_length=1, max_length=200)
     description: str | None = None
+    aim: str | None = Field(default=None, max_length=300)
+    grade: str | None = None
+    extra_services: str | None = None
     attendees: int = Field(gt=0)
     room_struct: str | None = None
     coffee_break: bool = False
@@ -586,6 +607,8 @@ class ClientBookingCreate(BaseModel):
     coffee_other: str | None = Field(default=None, max_length=500)
     foreign_guests: bool = False
     is_urgent: bool = False
+    # Client acknowledged the participation rules (required by the form).
+    privacy_accepted: bool = False
     starts_at: datetime
     ends_at: datetime
     props: list[PropRequest] = []
@@ -609,6 +632,9 @@ class ClientBookingOut(BaseModel):
     contact_name: str | None = None
     phone: str | None = None
     description: str | None = None
+    aim: str | None = None
+    grade: str | None = None
+    extra_services: str | None = None
     coffee_break: bool = False
     coffee_headcount: int | None = None
     coffee_type: str | None = None

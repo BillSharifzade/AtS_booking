@@ -27,6 +27,16 @@ URGENT_THRESHOLD = timedelta(days=2)
 # layout builder can extend it. Mirrors schemas.ROOM_STRUCTS.
 ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
 
+# Valid requester grades ("Грейд"). Mirrors schemas.GRADES.
+GRADES = {
+    "Стажер",
+    "Специалист",
+    "Ведущий специалист",
+    "Главный специалист",
+    "Руководитель отдела",
+    "Руководитель департамента",
+}
+
 # What can be served at a coffee break. Mirrors schemas.COFFEE_TYPES.
 COFFEE_TYPES = {"standard", "other"}
 
@@ -220,6 +230,10 @@ async def create_booking(
     urgent: bool = False,
     room_struct: str | None = None,
     company_id: int | None = None,
+    aim: str | None = None,
+    grade: str | None = None,
+    extra_services: str | None = None,
+    privacy_accepted: bool = False,
     props: list[tuple[int, int]] | None = None,
 ) -> Booking:
     validate_window(room, starts_at, ends_at)
@@ -250,6 +264,11 @@ async def create_booking(
         raise BookingError(f"«{room.name}» недоступно в это время: {off.reason}.")
     if room_struct is not None and room_struct not in ROOM_STRUCTS:
         raise BookingError("Неизвестная расстановка.")
+    grade_val = (grade or "").strip() or None
+    if grade_val is not None and grade_val not in GRADES:
+        raise BookingError("Неизвестный грейд.")
+    aim_val = (aim or "").strip() or None
+    extra_services_val = (extra_services or "").strip() or None
     # Validate prop stock up-front so we don't create a booking we can't fulfil.
     resolved_props = await validate_props(session, props or [])
 
@@ -265,6 +284,10 @@ async def create_booking(
         event_type=event_type,
         event_name=event_name,
         description=description,
+        aim=aim_val,
+        grade=grade_val,
+        extra_services=extra_services_val,
+        privacy_accepted=privacy_accepted,
         attendees=attendees,
         room_struct=room_struct,
         coffee_break=coffee_break,

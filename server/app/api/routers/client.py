@@ -48,7 +48,8 @@ def _booking_out(b: Booking, has_feedback: bool, room_name: str, zone_name: str)
         starts_at=b.starts_at, ends_at=b.ends_at, attendees=b.attendees,
         status=b.status, room_struct=b.room_struct, has_feedback=has_feedback,
         event_type=b.event_type, company=b.company, contact_name=b.contact_name,
-        phone=b.phone, description=b.description, coffee_break=b.coffee_break,
+        phone=b.phone, description=b.description, aim=b.aim, grade=b.grade,
+        extra_services=b.extra_services, coffee_break=b.coffee_break,
         coffee_headcount=b.coffee_headcount, coffee_type=b.coffee_type,
         coffee_other=b.coffee_other, foreign_guests=b.foreign_guests,
         is_urgent=b.is_urgent, created_at=b.created_at,
@@ -179,6 +180,10 @@ async def create_booking(
             urgent=payload.is_urgent,
             room_struct=payload.room_struct,
             company_id=payload.company_id,
+            aim=payload.aim,
+            grade=payload.grade,
+            extra_services=payload.extra_services,
+            privacy_accepted=payload.privacy_accepted,
             props=[(p.prop_id, p.amount) for p in payload.props],
         )
         await upsert_user(

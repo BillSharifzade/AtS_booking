@@ -80,6 +80,9 @@ export type Booking = {
   event_type: string;
   event_name: string;
   description: string | null;
+  aim: string | null;
+  grade: string | null;
+  extra_services: string | null;
   attendees: number;
   room_struct: RoomStruct | null;
   coffee_break: boolean;
@@ -93,6 +96,7 @@ export type Booking = {
   ends_at: string;
   status: Status;
   is_urgent: boolean;
+  privacy_accepted: boolean;
   reject_reason: string | null;
   result_outcome: string | null;
   result_note: string | null;
@@ -248,6 +252,9 @@ export type NewBooking = {
   event_type: string;
   event_name: string;
   description: string | null;
+  aim?: string | null;
+  grade?: string | null;
+  extra_services?: string | null;
   attendees: number;
   room_struct?: RoomStruct | null;
   coffee_break: boolean;

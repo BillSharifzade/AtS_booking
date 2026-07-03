@@ -52,6 +52,9 @@ export type ClientBooking = {
   contact_name: string | null;
   phone: string | null;
   description: string | null;
+  aim: string | null;
+  grade: string | null;
+  extra_services: string | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
   coffee_type: string | null;
@@ -70,6 +73,9 @@ export type NewBooking = {
   event_type: string;
   event_name: string;
   description: string | null;
+  aim: string | null;
+  grade: string | null;
+  extra_services: string | null;
   attendees: number;
   room_struct: RoomStruct | null;
   coffee_break: boolean;
@@ -78,6 +84,7 @@ export type NewBooking = {
   coffee_other: string | null;
   foreign_guests: boolean;
   is_urgent: boolean;
+  privacy_accepted: boolean;
   starts_at: string;
   ends_at: string;
   props: { prop_id: number; amount: number }[];

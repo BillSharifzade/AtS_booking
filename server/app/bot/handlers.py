@@ -29,6 +29,8 @@ from app.db import SessionLocal
 from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage, Zone
 from app.services import availability as avail
 from app.services import bookings as svc
+from app.services.bookings import GRADES
+from app.schemas import GRADES as GRADE_ORDER
 from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
 from app.services.ratelimit import allow
 from app.services.reports import build_bookings_workbook, report_filename
@@ -60,6 +62,9 @@ class Booking_FSM(StatesGroup):
     event_type = State()
     event_name = State()
     description = State()
+    aim = State()
+    grade = State()
+    extra_services = State()
     coffee = State()
     coffee_count = State()
     coffee_type = State()
@@ -75,6 +80,15 @@ class Booking_FSM(StatesGroup):
 def _yesno_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="да"), KeyboardButton(text="нет")]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def _grade_kb() -> ReplyKeyboardMarkup:
+    # One grade per row — the labels are long enough to wrap awkwardly side by side.
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=g)] for g in GRADE_ORDER],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
@@ -471,6 +485,33 @@ async def get_event_name(msg: Message, state: FSMContext) -> None:
 async def get_description(msg: Message, state: FSMContext) -> None:
     desc = msg.text.strip()
     await state.update_data(description=None if desc == "-" else desc)
+    await state.set_state(Booking_FSM.aim)
+    await msg.answer(t.ENTER_AIM, reply_markup=ReplyKeyboardRemove())
+
+
+@router.message(Booking_FSM.aim)
+async def get_aim(msg: Message, state: FSMContext) -> None:
+    aim = msg.text.strip()
+    await state.update_data(aim=None if aim == "-" else aim)
+    await state.set_state(Booking_FSM.grade)
+    await msg.answer(t.PICK_GRADE, reply_markup=_grade_kb())
+
+
+@router.message(Booking_FSM.grade)
+async def get_grade(msg: Message, state: FSMContext) -> None:
+    grade = msg.text.strip()
+    if grade not in GRADES:
+        await msg.answer(t.INVALID_GRADE, reply_markup=_grade_kb())
+        return
+    await state.update_data(grade=grade)
+    await state.set_state(Booking_FSM.extra_services)
+    await msg.answer(t.ENTER_EXTRA_SERVICES, reply_markup=ReplyKeyboardRemove())
+
+
+@router.message(Booking_FSM.extra_services)
+async def get_extra_services(msg: Message, state: FSMContext) -> None:
+    extra = msg.text.strip()
+    await state.update_data(extra_services=None if extra == "-" else extra)
     await state.set_state(Booking_FSM.coffee)
     await msg.answer(t.COFFEE_QUESTION, reply_markup=_yesno_kb())
 
@@ -603,6 +644,9 @@ async def _show_confirm(msg: Message, state: FSMContext) -> None:
         f"Тип: {esc(data['event_type'])}\n"
         f"Название: {esc(data['event_name'])}\n"
         f"Описание: {esc(data.get('description')) or '—'}\n"
+        f"Цель: {esc(data.get('aim')) or '—'}\n"
+        f"Грейд: {esc(data.get('grade')) or '—'}\n"
+        f"Доп. услуги: {esc(data.get('extra_services')) or '—'}\n"
         f"Участников: {data['attendees']}\n"
         + _coffee_summary(data)
         + f"\nСрочная: {'да' if data.get('urgent') else 'нет'}"
@@ -654,6 +698,9 @@ async def confirm(msg: Message, state: FSMContext) -> None:
                 event_type=data["event_type"],
                 event_name=data["event_name"],
                 description=data.get("description"),
+                aim=data.get("aim"),
+                grade=data.get("grade"),
+                extra_services=data.get("extra_services"),
                 attendees=data["attendees"],
                 coffee_break=data["coffee"],
                 coffee_headcount=data.get("coffee_count"),
@@ -838,6 +885,12 @@ async def my(msg: Message) -> None:
             f"  статус: {b.status.value}"
         )
         extra: list[str] = []
+        if b.grade:
+            extra.append(f"  грейд: {esc(b.grade)}")
+        if b.aim:
+            extra.append(f"  цель: {esc(b.aim)}")
+        if b.extra_services:
+            extra.append(f"  доп. услуги: {esc(b.extra_services)}")
         if b.room_struct:
             extra.append(f"  расстановка: {ROOM_STRUCT_LABELS.get(b.room_struct, b.room_struct)}")
         coffee = _my_coffee_line(b)
