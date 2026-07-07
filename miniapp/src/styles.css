@@ -179,53 +179,64 @@ textarea { resize: vertical; min-height: 60px; }
 }
 
 /* ---- Room cards (uniform photo + meta) ---- */
-.room-grid { display: grid; grid-template-columns: 1fr; gap: 12px; align-items: stretch; }
+.room-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  align-items: stretch;
+}
 .room-card {
   position: relative; display: flex; flex-direction: column; text-align: left; padding: 0;
-  border-radius: var(--radius-lg); border: 1.5px solid var(--border); background: var(--panel);
+  border-radius: var(--radius); border: 1.5px solid var(--border); background: var(--panel);
   overflow: hidden; cursor: pointer; box-shadow: var(--shadow-sm);
   transition: border-color 0.16s var(--ease), box-shadow 0.2s var(--ease), transform 0.14s var(--ease);
 }
 @media (hover: hover) {
   .room-card:hover { border-color: var(--border-strong); box-shadow: var(--shadow-md); transform: translateY(-2px); }
 }
-.room-card:active { transform: scale(0.99); }
-.room-card.on { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-ring), var(--shadow-md); }
+.room-card:active { transform: scale(0.98); }
+.room-card.on { border-color: var(--accent); box-shadow: 0 0 0 2.5px var(--accent-ring), var(--shadow-md); }
 
 .room-photo {
-  position: relative; flex: none; height: 172px; display: grid; place-items: center; overflow: hidden;
+  position: relative; flex: none; aspect-ratio: 4 / 3;
+  display: grid; place-items: center; overflow: hidden;
   background: linear-gradient(135deg, #eef3ff 0%, #e2eafc 100%);
 }
 .room-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 /* Legibility scrim behind the "N фото" badge, only over real photos. */
 .room-photo:has(img)::after {
-  content: ""; position: absolute; inset: auto 0 0 0; height: 44%;
-  background: linear-gradient(to top, rgba(11, 13, 18, 0.30), transparent); pointer-events: none;
+  content: ""; position: absolute; inset: auto 0 0 0; height: 50%;
+  background: linear-gradient(to top, rgba(11, 13, 18, 0.35), transparent); pointer-events: none;
 }
-.room-photo-empty { color: var(--accent); opacity: 0.5; display: grid; place-items: center; }
+.room-photo-empty { color: var(--accent); opacity: 0.4; display: grid; place-items: center; }
 .room-photo-count {
-  position: absolute; z-index: 1; bottom: 9px; left: 9px; padding: 3px 9px; border-radius: 999px;
-  background: rgba(11, 13, 18, 0.55); color: #fff; font-size: 11px; font-weight: 650; backdrop-filter: blur(4px);
+  position: absolute; z-index: 1; bottom: 7px; left: 7px; padding: 2px 8px; border-radius: 999px;
+  background: rgba(11, 13, 18, 0.55); color: #fff; font-size: 10px; font-weight: 650; backdrop-filter: blur(4px);
 }
 .room-check {
-  position: absolute; z-index: 1; top: 9px; right: 9px; display: grid; place-items: center; width: 26px; height: 26px;
-  border-radius: 50%; background: var(--accent-grad); color: #fff; font-size: 13px; font-weight: 800;
+  position: absolute; z-index: 1; top: 7px; right: 7px; display: grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--accent-grad); color: #fff; font-size: 11px; font-weight: 800;
   box-shadow: 0 2px 8px var(--accent-ring);
   opacity: 0; transform: scale(0.4); transition: opacity 0.18s var(--ease), transform 0.24s var(--spring);
 }
 .room-card.on .room-check { opacity: 1; transform: scale(1); }
 
-.room-info { display: flex; flex-direction: column; gap: 10px; padding: 13px 15px 15px; flex: 1; }
+.room-info {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 10px 12px; flex: 1;
+}
 .room-name {
-  font-size: 15.5px; font-weight: 700; letter-spacing: -0.2px; color: var(--ink); line-height: 1.3;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 13.5px; font-weight: 700; letter-spacing: -0.15px; color: var(--ink); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; text-overflow: ellipsis;
+  /* Allow wrapping to 2 lines, then clamp — names are always visible */
 }
-.room-meta { display: flex; flex-wrap: wrap; gap: 7px; margin-top: auto; }
+.room-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: auto; }
 .room-chip {
-  display: inline-flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 999px;
-  background: var(--accent-soft); color: var(--accent-2); font-size: 12.5px; font-weight: 650; line-height: 1;
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-2); font-size: 11px; font-weight: 650; line-height: 1;
 }
-.room-chip svg { flex: none; opacity: 0.85; }
+.room-chip svg { flex: none; width: 12px; height: 12px; opacity: 0.85; }
 .room-chip.alt { background: #eef0f5; color: var(--ink-2); }
 
 /* ---- Chips ---- */
@@ -471,7 +482,12 @@ button.ghost:active { background: var(--bg); }
 
   /* Denser choice grids now that there's a full content column. */
   .mode-desktop .company-grid { grid-template-columns: repeat(3, 1fr); }
-  .mode-desktop .room-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .mode-desktop .room-grid { grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .mode-desktop .room-card { border-radius: var(--radius-lg); }
+  .mode-desktop .room-name { font-size: 15px; }
+  .mode-desktop .room-info { padding: 12px 14px 14px; gap: 8px; }
+  .mode-desktop .room-chip { font-size: 12px; padding: 4px 10px; }
+  .mode-desktop .room-check { width: 26px; height: 26px; font-size: 13px; top: 9px; right: 9px; }
   .mode-desktop .struct-list { grid-template-columns: repeat(2, 1fr); }
   .mode-desktop .booking-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
   .mode-desktop .booking-grid .booking-card { margin-bottom: 0; }
