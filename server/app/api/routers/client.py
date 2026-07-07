@@ -13,18 +13,17 @@ from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_customer
 from app.db import get_session
-from app.models import Booking, BookingProp, BookingStatus, Company, Feedback, Prop, Room, RoomImage, Zone
+from app.models import Booking, BookingProp, BookingStatus, Company, Feedback, Prop, Room, RoomImage
 from app.schemas import (
     ClientBookingCreate,
     ClientBookingOut,
     ClientBootstrap,
+    ClientRoomOut,
     ClientUser,
     CompanyOut,
     FeedbackCreate,
     PropOut,
     ZoneDayOut,
-    ZoneImageOut,
-    ZoneOut,
     ZoneSlotOut,
 )
 from app.services import availability as avail
@@ -42,10 +41,10 @@ def _user_name(user: dict) -> str | None:
     return full or (f"@{user['username']}" if user.get("username") else None)
 
 
-def _booking_out(b: Booking, has_feedback: bool, room_name: str, zone_name: str) -> ClientBookingOut:
+def _booking_out(b: Booking, has_feedback: bool, room_name: str) -> ClientBookingOut:
     """Map a Booking to the client view (list card + detail modal share one shape)."""
     return ClientBookingOut(
-        id=b.id, event_name=b.event_name, room=room_name, zone=zone_name,
+        id=b.id, event_name=b.event_name, room=room_name,
         starts_at=b.starts_at, ends_at=b.ends_at, attendees=b.attendees,
         status=b.status, room_struct=b.room_struct, has_feedback=has_feedback,
         event_type=b.event_type, company=b.company, contact_name=b.contact_name,
@@ -57,36 +56,35 @@ def _booking_out(b: Booking, has_feedback: bool, room_name: str, zone_name: str)
     )
 
 
-async def _zones_out(session: AsyncSession) -> list[ZoneOut]:
-    zones = (
-        await session.execute(select(Zone).options(selectinload(Zone.rooms)).order_by(Zone.name))
+async def _rooms_out(session: AsyncSession) -> list[ClientRoomOut]:
+    """Bookable rooms for the client — zones are an admin-only grouping and are not
+    exposed. Ordered smallest-sufficient capacity first (unknown-capacity rooms last)."""
+    rooms = (
+        await session.execute(
+            select(Room).where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
+        )
     ).scalars().all()
-    # Photo references for all bookable rooms, grouped by zone (ids only — the raw
-    # bytes are served publicly, so the client builds the URL and lazy-loads them).
+    rooms = sorted(rooms, key=svc._capacity_sort_key)
+    # Photo ids per room (raw bytes are served publicly, so the client builds the URL
+    # and lazy-loads them).
     img_rows = (
         await session.execute(
-            select(RoomImage.room_id, RoomImage.id, Room.name, Room.zone_id)
+            select(RoomImage.room_id, RoomImage.id)
             .join(Room, Room.id == RoomImage.room_id)
             .where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
-            .order_by(Room.name, RoomImage.sort_order, RoomImage.id)
+            .order_by(RoomImage.room_id, RoomImage.sort_order, RoomImage.id)
         )
     ).all()
-    photos_by_zone: dict[int, list[ZoneImageOut]] = {}
-    for rid, iid, rname, zid in img_rows:
-        photos_by_zone.setdefault(zid, []).append(
-            ZoneImageOut(room_id=rid, image_id=iid, room_name=rname)
+    photos_by_room: dict[int, list[int]] = {}
+    for rid, iid in img_rows:
+        photos_by_room.setdefault(rid, []).append(iid)
+    return [
+        ClientRoomOut(
+            id=r.id, name=r.name, capacity=r.capacity, meter_squared=r.meter_squared,
+            photos=photos_by_room.get(r.id, [])[:8],
         )
-    out: list[ZoneOut] = []
-    for z in zones:
-        bookable = [r for r in z.rooms if r.is_active and not r.is_coffee_break]
-        # Only surface zones a customer can actually book into.
-        if bookable:
-            out.append(ZoneOut(
-                id=z.id, name=z.name, room_count=len(bookable),
-                total_capacity=sum(svc.capacity_number(r.capacity) or 0 for r in bookable),
-                photos=photos_by_zone.get(z.id, [])[:8],
-            ))
-    return out
+        for r in rooms
+    ]
 
 
 async def _props_out(session: AsyncSession) -> list[PropOut]:
@@ -119,21 +117,21 @@ async def bootstrap(
     session: AsyncSession = Depends(get_session),
 ) -> ClientBootstrap:
     """Everything the mini app needs on launch: the user, active companies, bookable
-    zones, and active equipment."""
+    rooms, and active equipment."""
     companies = (
         await session.execute(select(Company).where(Company.is_active.is_(True)).order_by(Company.name))
     ).scalars().all()
     return ClientBootstrap(
         user=ClientUser(telegram_id=user["id"], name=_user_name(user), username=user.get("username")),
         companies=[CompanyOut.model_validate(c) for c in companies],
-        zones=await _zones_out(session),
+        rooms=await _rooms_out(session),
         props=await _props_out(session),
     )
 
 
-@router.get("/zones/{zone_id}/days", response_model=list[ZoneDayOut])
-async def zone_days(
-    zone_id: int,
+@router.get("/rooms/{room_id}/days", response_model=list[ZoneDayOut])
+async def room_days(
+    room_id: int,
     date_from: date = Query(...),
     date_to: date = Query(...),
     attendees: int = Query(1, ge=1),
@@ -144,19 +142,19 @@ async def zone_days(
         raise HTTPException(400, "date_to before date_from")
     if (date_to - date_from).days > MAX_DAY_RANGE:
         date_to = date_from + timedelta(days=MAX_DAY_RANGE)
-    days = await avail.zone_available_days(session, zone_id, date_from, date_to, attendees)
+    days = await avail.room_available_days(session, room_id, date_from, date_to, attendees)
     return [ZoneDayOut(date=d, available=a) for d, a in sorted(days.items())]
 
 
-@router.get("/zones/{zone_id}/slots", response_model=list[ZoneSlotOut])
-async def zone_slots(
-    zone_id: int,
+@router.get("/rooms/{room_id}/slots", response_model=list[ZoneSlotOut])
+async def room_slots(
+    room_id: int,
     on: date = Query(...),
     attendees: int = Query(1, ge=1),
     _: dict = Depends(current_customer),
     session: AsyncSession = Depends(get_session),
 ) -> list[ZoneSlotOut]:
-    slots = await avail.zone_day_slots(session, zone_id, on, attendees)
+    slots = await avail.room_day_slots(session, room_id, on, attendees)
     return [ZoneSlotOut(start=s, end=e) for s, e in slots]
 
 
@@ -166,9 +164,9 @@ async def create_booking(
     user: dict = Depends(current_customer),
     session: AsyncSession = Depends(get_session),
 ) -> ClientBookingOut:
-    room = await avail.assign_room(session, payload.zone_id, payload.attendees, payload.starts_at, payload.ends_at)
-    if room is None:
-        raise HTTPException(409, "Нет свободного помещения в выбранной зоне на это время для указанного числа участников.")
+    room = await session.get(Room, payload.room_id)
+    if room is None or not room.is_active or room.is_coffee_break:
+        raise HTTPException(404, "Помещение недоступно для бронирования.")
     # If a company was picked, trust the curated record's name over any client-sent label.
     company_name = payload.company
     if payload.company_id is not None:
@@ -215,7 +213,7 @@ async def create_booking(
         await session.rollback()
         raise HTTPException(409, str(exc))
     await notify_new(booking, room)
-    return _booking_out(booking, False, room.name, room.zone_name)
+    return _booking_out(booking, False, room.name)
 
 
 @router.get("/bookings", response_model=list[ClientBookingOut])
@@ -225,17 +223,13 @@ async def my_bookings(
 ) -> list[ClientBookingOut]:
     stmt = (
         select(Booking)
-        .options(selectinload(Booking.room).selectinload(Room.zone), selectinload(Booking.feedback))
+        .options(selectinload(Booking.room), selectinload(Booking.feedback))
         .where(Booking.customer_telegram_id == user["id"])
         .order_by(Booking.starts_at.desc())
     )
     rows = (await session.execute(stmt)).scalars().all()
     return [
-        _booking_out(
-            b, b.feedback is not None,
-            b.room.name if b.room else "—",
-            b.room.zone.name if b.room and b.room.zone else "—",
-        )
+        _booking_out(b, b.feedback is not None, b.room.name if b.room else "—")
         for b in rows
     ]
 

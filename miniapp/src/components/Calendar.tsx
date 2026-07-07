@@ -13,12 +13,12 @@ const toHM = (min: number) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
 const hm = (t: string) => t.slice(0, 5);
 
 export default function Calendar({
-  zoneId,
+  roomId,
   attendees,
   value,
   onChange,
 }: {
-  zoneId: number;
+  roomId: number;
   attendees: number;
   value: SlotValue;
   onChange: (v: SlotValue) => void;
@@ -38,23 +38,23 @@ export default function Calendar({
     const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
     let active = true;
     setLoadingDays(true);
-    api.zoneDays(zoneId, ymd(first), ymd(last), attendees)
+    api.roomDays(roomId, ymd(first), ymd(last), attendees)
       .then((rows) => { if (active) setDays(Object.fromEntries(rows.map((r) => [r.date, r.available]))); })
       .catch(() => { if (active) setDays({}); })
       .finally(() => { if (active) setLoadingDays(false); });
     return () => { active = false; };
-  }, [zoneId, attendees, month]);
+  }, [roomId, attendees, month]);
 
   useEffect(() => {
     if (!attendees || !value.date) { setSlots([]); return; }
     let active = true;
     setLoadingSlots(true);
-    api.zoneSlots(zoneId, value.date, attendees)
+    api.roomSlots(roomId, value.date, attendees)
       .then((s) => { if (active) setSlots(s); })
       .catch(() => { if (active) setSlots([]); })
       .finally(() => { if (active) setLoadingSlots(false); });
     return () => { active = false; };
-  }, [zoneId, attendees, value.date]);
+  }, [roomId, attendees, value.date]);
 
   const cells = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);

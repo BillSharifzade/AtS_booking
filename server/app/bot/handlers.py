@@ -26,7 +26,7 @@ from aiogram.types import BufferedInputFile, InputMediaPhoto
 from app.bot import texts as t
 from app.config import local_now, settings
 from app.db import SessionLocal
-from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage, Zone
+from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage
 from app.services import availability as avail
 from app.services import bookings as svc
 from app.services.bookings import GRADES
@@ -50,8 +50,9 @@ class Feedback_FSM(StatesGroup):
 
 
 class Booking_FSM(StatesGroup):
-    # Zone-first flow: pick zone -> attendees -> calendar -> start -> end -> details.
-    zone = State()
+    # Room-first flow: pick room -> attendees -> calendar -> start -> end -> details.
+    # (Zones are an admin-only grouping and are never shown to customers.)
+    room = State()
     attendees = State()
     calendar = State()
     pick_start = State()
@@ -187,39 +188,42 @@ MONTHS_RU = [
 WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
-async def _zones_with_rooms(session: AsyncSession) -> list[Zone]:
-    return list(
-        (
-            await session.execute(
-                select(Zone)
-                .join(Room, Room.zone_id == Zone.id)
-                .where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
-                .order_by(Zone.name)
-                .distinct()
-            )
-        ).scalars().all()
+async def _bookable_rooms_list(session: AsyncSession) -> list[Room]:
+    """Active, non-coffee rooms, smallest-sufficient capacity first (unknown last).
+    Customers pick a room directly — zones are never surfaced."""
+    rooms = (
+        await session.execute(
+            select(Room).where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
+        )
+    ).scalars().all()
+    return sorted(rooms, key=svc._capacity_sort_key)
+
+
+def _rooms_kb(rooms: list[Room]) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=f"{r.name} · {r.capacity}", callback_data=f"room:{r.id}")]
+            for r in rooms
+        ]
     )
 
 
 @router.message(Command("book"))
 async def book_start(msg: Message, state: FSMContext) -> None:
     async with SessionLocal() as session:  # type: AsyncSession
-        zones = await _zones_with_rooms(session)
-    if not zones:
+        rooms = await _bookable_rooms_list(session)
+    if not rooms:
         await msg.answer(t.NO_ROOMS)
         return
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[[InlineKeyboardButton(text=z.name, callback_data=f"zone:{z.id}")] for z in zones]
-    )
     await state.clear()
-    await state.set_state(Booking_FSM.zone)
+    await state.set_state(Booking_FSM.room)
     await state.update_data(mode="new")
-    await msg.answer(t.PICK_ZONE, reply_markup=kb)
+    await msg.answer(t.PICK_ROOM, reply_markup=_rooms_kb(rooms))
 
 
-@router.callback_query(Booking_FSM.zone, F.data.startswith("zone:"))
-async def pick_zone(cq: CallbackQuery, state: FSMContext) -> None:
-    await state.update_data(zone_id=int(cq.data.split(":")[1]))
+@router.callback_query(Booking_FSM.room, F.data.startswith("room:"))
+async def pick_room(cq: CallbackQuery, state: FSMContext) -> None:
+    await state.update_data(room_id=int(cq.data.split(":")[1]))
     await cq.answer()
     data = await state.get_data()
     if data.get("mode") == "edit":
@@ -242,11 +246,11 @@ async def get_attendees(msg: Message, state: FSMContext) -> None:
     await _show_calendar(msg, state)
 
 
-async def _calendar_markup(session: AsyncSession, zone_id: int, attendees: int, year: int, month: int) -> InlineKeyboardMarkup:
+async def _calendar_markup(session: AsyncSession, room_id: int, attendees: int, year: int, month: int) -> InlineKeyboardMarkup:
     today = local_now().date()
     ndays = _cal.monthrange(year, month)[1]
     first = date(year, month, 1)
-    avail_map = await avail.zone_available_days(session, zone_id, first, date(year, month, ndays), attendees)
+    avail_map = await avail.room_available_days(session, room_id, first, date(year, month, ndays), attendees)
 
     prev_y, prev_m = (year - 1, 12) if month == 1 else (year, month - 1)
     next_y, next_m = (year + 1, 1) if month == 12 else (year, month + 1)
@@ -283,7 +287,7 @@ async def _show_calendar(msg: Message, state: FSMContext) -> None:
     year = int(data.get("cal_year", today.year))
     month = int(data.get("cal_month", today.month))
     async with SessionLocal() as session:
-        kb = await _calendar_markup(session, data["zone_id"], data["attendees"], year, month)
+        kb = await _calendar_markup(session, data["room_id"], data["attendees"], year, month)
     await state.update_data(cal_year=year, cal_month=month)
     await state.set_state(Booking_FSM.calendar)
     await msg.answer(t.PICK_DATE, reply_markup=kb)
@@ -298,7 +302,7 @@ async def calendar_cb(cq: CallbackQuery, state: FSMContext) -> None:
         await state.update_data(cal_year=year, cal_month=month)
         data = await state.get_data()
         async with SessionLocal() as session:
-            kb = await _calendar_markup(session, data["zone_id"], data["attendees"], year, month)
+            kb = await _calendar_markup(session, data["room_id"], data["attendees"], year, month)
         try:
             await cq.message.edit_reply_markup(reply_markup=kb)
         except Exception:  # noqa: BLE001 - "message not modified" etc.
@@ -347,8 +351,8 @@ def _gen_ends(start: str, max_end: str) -> list[str]:
 async def _show_starts(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with SessionLocal() as session:
-        slots = await avail.zone_day_slots(
-            session, data["zone_id"], date.fromisoformat(data["bdate"]), data["attendees"]
+        slots = await avail.room_day_slots(
+            session, data["room_id"], date.fromisoformat(data["bdate"]), data["attendees"]
         )
     if not slots:
         await msg.answer(t.NO_SLOTS)
@@ -636,9 +640,9 @@ def _coffee_summary(data: dict) -> str:
 async def _show_confirm(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with SessionLocal() as session:
-        zone = await session.get(Zone, data["zone_id"])
+        room = await session.get(Room, data["room_id"])
     summary = (
-        f"Зона: {esc(zone.name)} (помещение подберём автоматически)\n"
+        f"Помещение: {esc(room.name)} ({esc(room.capacity)})\n"
         f"Дата: {data['bdate']}\n"
         f"Время: {data['start']}–{data['end']}\n"
         f"Тип: {esc(data['event_type'])}\n"
@@ -676,13 +680,11 @@ async def confirm(msg: Message, state: FSMContext) -> None:
     ends_at = datetime.combine(bd, eh, tzinfo=timezone.utc)
 
     async with SessionLocal() as session:
-        # System assigns the smallest fitting free room in the chosen zone.
-        room = await avail.assign_room(session, data["zone_id"], data["attendees"], starts_at, ends_at)
-        if room is None:
-            await _offer_alternatives(
-                msg, state,
-                "Нет свободного помещения в выбранной зоне на это время для указанного числа участников.",
-            )
+        # The customer chose a specific room; create_booking re-validates capacity,
+        # operating hours, conflicts and off-time (raising BookingError on failure).
+        room = await session.get(Room, data["room_id"])
+        if room is None or not room.is_active or room.is_coffee_break:
+            await _offer_alternatives(msg, state, "Выбранное помещение больше недоступно.")
             return
         try:
             booking = await svc.create_booking(
@@ -736,7 +738,7 @@ def _fix_menu_kb() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Дата и время", callback_data="fix:when")],
-            [InlineKeyboardButton(text="Зона", callback_data="fix:zone")],
+            [InlineKeyboardButton(text="Помещение", callback_data="fix:room")],
             [InlineKeyboardButton(text="Число участников", callback_data="fix:attendees")],
             [InlineKeyboardButton(text="Кофе-брейк (число)", callback_data="fix:coffee")],
             [InlineKeyboardButton(text="Отменить заявку", callback_data="fix:cancel")],
@@ -747,10 +749,10 @@ def _fix_menu_kb() -> InlineKeyboardMarkup:
 async def _offer_alternatives(msg: Message, state: FSMContext, reason: str) -> None:
     """Validation/availability error: keep all entered data, explain the problem, and
     proactively suggest concrete alternatives the customer can tap (Module B):
-      1. free start times on the same day (other rooms in the zone are already pooled in),
+      1. free start times on the same day for the chosen room,
       2. otherwise the nearest free day within a month (jump the calendar there),
-      3. otherwise nothing fits — fall back to changing zone / attendee count.
-    A fix menu is always offered too, so zone/participants/cancel stay reachable."""
+      3. otherwise nothing fits — fall back to changing room / attendee count.
+    A fix menu is always offered too, so room/participants/cancel stay reachable."""
     await state.update_data(mode="edit")
     await msg.answer(t.ERROR.format(reason=esc(reason)), reply_markup=ReplyKeyboardRemove())
 
@@ -760,7 +762,7 @@ async def _offer_alternatives(msg: Message, state: FSMContext, reason: str) -> N
     if day:
         d0 = date.fromisoformat(day)
         async with SessionLocal() as session:
-            slots = await avail.zone_day_slots(session, data["zone_id"], d0, data["attendees"])
+            slots = await avail.room_day_slots(session, data["room_id"], d0, data["attendees"])
         if slots:
             slot_map = {s.strftime("%H:%M"): e.strftime("%H:%M") for s, e in slots}
             await state.update_data(slot_map=slot_map)
@@ -769,8 +771,8 @@ async def _offer_alternatives(msg: Message, state: FSMContext, reason: str) -> N
             offered = True
         else:
             async with SessionLocal() as session:
-                days = await avail.zone_available_days(
-                    session, data["zone_id"], d0, d0 + timedelta(days=30), data["attendees"]
+                days = await avail.room_available_days(
+                    session, data["room_id"], d0, d0 + timedelta(days=30), data["attendees"]
                 )
             nxt = next((d for d in sorted(days) if days[d]), None)
             if nxt:
@@ -804,17 +806,14 @@ async def fix_choice(cq: CallbackQuery, state: FSMContext) -> None:
         await cq.message.answer(t.CANCELLED)
     elif what == "when":
         await _show_calendar(cq.message, state)
-    elif what == "zone":
+    elif what == "room":
         async with SessionLocal() as session:
-            zones = await _zones_with_rooms(session)
-        if not zones:
+            rooms = await _bookable_rooms_list(session)
+        if not rooms:
             await cq.message.answer(t.NO_ROOMS)
             return
-        kb = InlineKeyboardMarkup(
-            inline_keyboard=[[InlineKeyboardButton(text=z.name, callback_data=f"zone:{z.id}")] for z in zones]
-        )
-        await state.set_state(Booking_FSM.zone)
-        await cq.message.answer(t.PICK_ZONE, reply_markup=kb)
+        await state.set_state(Booking_FSM.room)
+        await cq.message.answer(t.PICK_ROOM, reply_markup=_rooms_kb(rooms))
     elif what == "attendees":
         await state.set_state(Booking_FSM.attendees)
         await cq.message.answer(t.ENTER_ATTENDEES)

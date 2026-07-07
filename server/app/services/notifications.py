@@ -61,7 +61,8 @@ def _coffee_line(booking: Booking) -> str:
     return line
 
 
-def _booking_card(booking: Booking, room: Room) -> str:
+def _booking_card(booking: Booking, room: Room, *, show_zone: bool = False) -> str:
+    # Zones are an admin-only grouping — customers only ever see the room name.
     struct = ""
     if booking.room_struct:
         struct = f"Расстановка: {ROOM_STRUCT_LABELS.get(booking.room_struct, booking.room_struct)}\n"
@@ -72,9 +73,12 @@ def _booking_card(booking: Booking, room: Room) -> str:
         extras += f"Цель: {esc(booking.aim)}\n"
     if booking.extra_services:
         extras += f"Доп. услуги: {esc(booking.extra_services)}\n"
+    room_line = f"Помещение: {esc(room.name)}"
+    if show_zone:
+        room_line += f" (зона {esc(room.zone.name)})"
     return (
         f"<b>{esc(booking.event_name)}</b>\n"
-        f"Помещение: {esc(room.name)} (зона {esc(room.zone.name)})\n"
+        f"{room_line}\n"
         f"Когда: {_fmt_dt(booking.starts_at)} — {_fmt_dt(booking.ends_at)}\n"
         f"Тип: {esc(booking.event_type)}\n"
         f"Участников: {booking.attendees}\n"
@@ -100,7 +104,7 @@ async def notify_new(booking: Booking, room: Room) -> None:
     admin_msg = ("Новая заявка №{id}{urgent}\n\n{card}").format(
         id=booking.id,
         urgent=" (СРОЧНАЯ)" if booking.is_urgent else "",
-        card=_booking_card(booking, room),
+        card=_booking_card(booking, room, show_zone=True),
     )
     for admin_id in settings.admin_telegram_ids:
         await send_text(admin_id, admin_msg)
@@ -114,7 +118,7 @@ async def notify_status_change(booking: Booking, room: Room, new_status: Booking
         )
         await send_text(
             settings.sat_bookings_group_chat_id,
-            f"Новое мероприятие\n\n{_booking_card(booking, room)}",
+            f"Новое мероприятие\n\n{_booking_card(booking, room, show_zone=True)}",
         )
     elif new_status == BookingStatus.rejected:
         reason = f"\nПричина: {esc(booking.reject_reason)}" if booking.reject_reason else ""

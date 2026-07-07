@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, RoomStruct, roomImageUrl } from "./api";
+import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
 import { GRADES, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
@@ -16,7 +16,7 @@ const LAST_STEP = STEPS.length - 2;
 type Form = {
   company_id: number | null;
   company: string;
-  zone_id: number | null;
+  room_id: number | null;
   attendees: string;
   slot: SlotValue;
   room_struct: RoomStruct | null;
@@ -40,7 +40,7 @@ type Form = {
 };
 
 const emptyForm = (name: string): Form => ({
-  company_id: null, company: "", zone_id: null, attendees: "10",
+  company_id: null, company: "", room_id: null, attendees: "10",
   slot: { date: "", start: "", end: "" }, room_struct: null, props: {},
   event_name: "", event_type: "", description: "", aim: "", grade: "", extra_services: "",
   contact_name: name, phone: "",
@@ -54,14 +54,6 @@ const emptyForm = (name: string): Form => ({
 // instead of being shifted into the browser's local timezone.
 function fmt(dt: string) {
   return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
-}
-
-// Russian plural for "зал" (room): 1 зал, 2 зала, 5 залов.
-function roomsWord(n: number): string {
-  const m10 = n % 10, m100 = n % 100;
-  if (m10 === 1 && m100 !== 11) return "зал";
-  if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return "зала";
-  return "залов";
 }
 
 export default function App() {
@@ -115,7 +107,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   const canNext = useMemo(() => {
     switch (step) {
       case 0: return !!(form.company_id || form.company.trim());
-      case 1: return !!(form.zone_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
+      case 1: return !!(form.room_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
       case 2: return true; // room_struct optional
       case 3: return true; // props optional
       case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.aim.trim() && form.grade &&
@@ -132,7 +124,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       .map(([id, amt]) => ({ prop_id: Number(id), amount: parseInt(amt, 10) || 0 }))
       .filter((p) => p.amount > 0);
     const payload: NewBooking = {
-      zone_id: form.zone_id!,
+      room_id: form.room_id!,
       company_id: form.company_id,
       company: form.company.trim(),
       contact_name: form.contact_name.trim(),
@@ -175,7 +167,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         <div className="success-card">
           <div className="success-check">✓</div>
           <h2>Заявка №{created.id} создана</h2>
-          <p>Помещение: <b>{created.room}</b> (зона {created.zone})</p>
+          <p>Помещение: <b>{created.room}</b></p>
           <p className="muted">{fmt(created.starts_at)} — {created.ends_at.slice(11, 16)}</p>
           <p className="muted">Мы свяжемся с вами после подтверждения.</p>
           <button className="primary big" onClick={onDone}>Мои заявки</button>
@@ -217,43 +209,45 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       )}
 
       {step === 1 && (
-        <Section title="Зал, участники и время">
-          <Field label="Зона">
-            {boot.zones.length > 0 ? (
+        <Section title="Помещение, участники и время">
+          <Field label="Помещение">
+            {boot.rooms.length > 0 ? (
               <div className="zone-grid">
-                {boot.zones.map((z) => (
+                {boot.rooms.map((r: Room) => (
                   <button
-                    key={z.id}
-                    className={`zone-card ${form.zone_id === z.id ? "on" : ""}`}
-                    onClick={() => { set({ zone_id: z.id, slot: { date: "", start: "", end: "" } }); haptic(); }}
+                    key={r.id}
+                    className={`zone-card ${form.room_id === r.id ? "on" : ""}`}
+                    onClick={() => { set({ room_id: r.id, slot: { date: "", start: "", end: "" } }); haptic(); }}
                   >
                     <div className="zone-photo">
-                      {z.photos.length > 0 ? (
-                        <img src={roomImageUrl(z.photos[0].room_id, z.photos[0].image_id)} alt={z.photos[0].room_name} loading="lazy" />
+                      {r.photos.length > 0 ? (
+                        <img src={roomImageUrl(r.id, r.photos[0])} alt={r.name} loading="lazy" />
                       ) : (
                         <span className="zone-photo-empty">Без фото</span>
                       )}
-                      {z.photos.length > 1 && <span className="zone-photo-count">{z.photos.length} фото</span>}
-                      {form.zone_id === z.id && <span className="zone-check">✓</span>}
+                      {r.photos.length > 1 && <span className="zone-photo-count">{r.photos.length} фото</span>}
+                      {form.room_id === r.id && <span className="zone-check">✓</span>}
                     </div>
                     <div className="zone-info">
-                      <span className="zone-name">{z.name}</span>
-                      <span className="zone-cap">до {z.total_capacity} чел. · {z.room_count} {roomsWord(z.room_count)}</span>
+                      <span className="zone-name">{r.name}</span>
+                      <span className="zone-cap">
+                        {r.capacity}{r.meter_squared ? ` · ${r.meter_squared} м²` : ""}
+                      </span>
                     </div>
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="hint">Пока нет доступных залов для брони. Администратору нужно добавить хотя бы одно активное помещение (не «кофе-брейк»).</div>
+              <div className="hint">Пока нет доступных помещений для брони. Администратору нужно добавить хотя бы одно активное помещение (не «кофе-брейк»).</div>
             )}
           </Field>
           <Field label="Участников">
             <input inputMode="numeric" value={form.attendees} onChange={(e) => set({ attendees: e.target.value, slot: { date: "", start: "", end: "" } })} />
           </Field>
-          {form.zone_id && attendeesNum > 0 ? (
-            <Calendar zoneId={form.zone_id} attendees={attendeesNum} value={form.slot} onChange={(slot) => set({ slot })} />
+          {form.room_id && attendeesNum > 0 ? (
+            <Calendar roomId={form.room_id} attendees={attendeesNum} value={form.slot} onChange={(slot) => set({ slot })} />
           ) : (
-            <div className="hint">Выберите зону и число участников, чтобы увидеть свободные даты.</div>
+            <div className="hint">Выберите помещение и число участников, чтобы увидеть свободные даты.</div>
           )}
         </Section>
       )}
@@ -466,7 +460,7 @@ function MyBookings() {
             <span className="bc-title">{b.event_name}</span>
             <span className={`status ${STATUS_TONE[b.status]}`}>{STATUS_LABELS[b.status]}</span>
           </div>
-          <div className="bc-meta">{b.room} · {b.zone} · {b.attendees} чел.</div>
+          <div className="bc-meta">{b.room} · {b.attendees} чел.</div>
           <div className="bc-when">{fmt(b.starts_at)} — {b.ends_at.slice(11, 16)}</div>
           {b.is_urgent && <span className="bc-urgent">Срочно</span>}
           {(b.status === "completed" || b.status === "archived") && !b.has_feedback && (
@@ -503,7 +497,7 @@ function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBoo
         <dl className="detail-list">
           <DetailRow label="Заявка" value={`№${b.id}`} />
           <DetailRow label="Когда" value={`${fmt(b.starts_at)} — ${b.ends_at.slice(11, 16)}`} />
-          <DetailRow label="Помещение" value={`${b.room} · зона ${b.zone}`} />
+          <DetailRow label="Помещение" value={b.room} />
           <DetailRow label="Участников" value={`${b.attendees} чел.`} />
           {b.event_type && <DetailRow label="Тип" value={b.event_type} />}
           {b.aim && <DetailRow label="Цель" value={b.aim} />}

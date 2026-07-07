@@ -28,11 +28,12 @@ export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped";
 export type Status = "new" | "processing" | "approved" | "rejected" | "completed" | "archived";
 
 export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; has_logo: boolean };
-export type ZonePhoto = { room_id: number; image_id: number; room_name: string };
-export type Zone = { id: number; name: string; room_count: number; total_capacity: number; photos: ZonePhoto[] };
+// A bookable room (zones are admin-only and never exposed to clients). `photos` holds
+// RoomImage ids; build the URL via roomImageUrl(room.id, imageId).
+export type Room = { id: number; name: string; capacity: string; meter_squared: number | null; photos: number[] };
 export type Prop = { id: number; name: string; kind: "tech" | "office"; unit: string | null; amount: number; available: number | null; description: string | null };
 export type ClientUser = { telegram_id: number; name: string | null; username: string | null };
-export type Bootstrap = { user: ClientUser; companies: Company[]; zones: Zone[]; props: Prop[] };
+export type Bootstrap = { user: ClientUser; companies: Company[]; rooms: Room[]; props: Prop[] };
 export type ZoneDay = { date: string; available: boolean };
 export type ZoneSlot = { start: string; end: string };
 
@@ -40,7 +41,6 @@ export type ClientBooking = {
   id: number;
   event_name: string;
   room: string;
-  zone: string;
   starts_at: string;
   ends_at: string;
   attendees: number;
@@ -66,7 +66,7 @@ export type ClientBooking = {
 };
 
 export type NewBooking = {
-  zone_id: number;
+  room_id: number;
   company_id: number | null;
   company: string;
   contact_name: string;
@@ -96,10 +96,10 @@ export const roomImageUrl = (roomId: number, imageId: number) => `${BASE}/rooms/
 
 export const api = {
   bootstrap: () => request<Bootstrap>("/client/bootstrap"),
-  zoneDays: (id: number, from: string, to: string, attendees: number) =>
-    request<ZoneDay[]>(`/client/zones/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
-  zoneSlots: (id: number, on: string, attendees: number) =>
-    request<ZoneSlot[]>(`/client/zones/${id}/slots?on=${on}&attendees=${attendees}`),
+  roomDays: (id: number, from: string, to: string, attendees: number) =>
+    request<ZoneDay[]>(`/client/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
+  roomSlots: (id: number, on: string, attendees: number) =>
+    request<ZoneSlot[]>(`/client/rooms/${id}/slots?on=${on}&attendees=${attendees}`),
   createBooking: (data: NewBooking) =>
     request<ClientBooking>("/client/bookings", { method: "POST", body: JSON.stringify(data) }),
   myBookings: () => request<ClientBooking[]>("/client/bookings"),

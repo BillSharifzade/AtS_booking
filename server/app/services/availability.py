@@ -169,3 +169,44 @@ async def assign_room(
     """Smallest bookable room in the zone that fits and is free for the slot."""
     rooms = await rooms_with_capacity(session, attendees, starts_at, ends_at, zone_id=zone_id)
     return rooms[0] if rooms else None
+
+
+# ----- Single-room availability -----
+# Clients pick a specific room (zones are an admin-only grouping), so these mirror the
+# zone helpers above but operate on exactly one room.
+
+
+async def _bookable_room(session: AsyncSession, room_id: int, attendees: int) -> Room | None:
+    """The room if it exists, is bookable (active, non-coffee) and holds ``attendees``."""
+    room = await session.get(Room, room_id)
+    if room is None or not room.is_active or room.is_coffee_break or not room_fits(room, attendees):
+        return None
+    return room
+
+
+async def room_day_slots(
+    session: AsyncSession, room_id: int, day: date, attendees: int
+) -> list[tuple[time, time]]:
+    room = await _bookable_room(session, room_id, attendees)
+    if room is None:
+        return []
+    day_start = _combine(day, time(0, 0))
+    busy = await _busy_by_room(session, [room.id], day_start, day_start + timedelta(days=1))
+    return _day_starts([room], day, busy, local_now())
+
+
+async def room_available_days(
+    session: AsyncSession, room_id: int, day_from: date, day_to: date, attendees: int
+) -> dict[date, bool]:
+    room = await _bookable_room(session, room_id, attendees)
+    today = local_now().date()
+    if room is None:
+        return {d: False for d in _daterange(day_from, day_to)}
+    range_start = _combine(day_from, time(0, 0))
+    range_end = _combine(day_to, time(0, 0)) + timedelta(days=1)
+    busy = await _busy_by_room(session, [room.id], range_start, range_end)
+    now = local_now()
+    out: dict[date, bool] = {}
+    for d in _daterange(day_from, day_to):
+        out[d] = False if d < today else bool(_day_starts([room], d, busy, now))
+    return out

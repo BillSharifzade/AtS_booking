@@ -583,15 +583,26 @@ class ClientUser(BaseModel):
     username: str | None = None
 
 
+class ClientRoomOut(BaseModel):
+    """A bookable room as the client sees it — zones are an admin-only grouping and
+    are deliberately not exposed here."""
+    id: int
+    name: str
+    capacity: str
+    meter_squared: int | None = None
+    # RoomImage ids; the raw bytes are served publicly at /rooms/{id}/images/{image_id}/raw.
+    photos: list[int] = []
+
+
 class ClientBootstrap(BaseModel):
     user: ClientUser
     companies: list[CompanyOut]
-    zones: list[ZoneOut]
+    rooms: list[ClientRoomOut]
     props: list[PropOut]
 
 
 class ClientBookingCreate(BaseModel):
-    zone_id: int
+    room_id: int
     company_id: int | None = None
     company: str = Field(min_length=1, max_length=200)
     contact_name: str = Field(min_length=1, max_length=200)
@@ -619,11 +630,11 @@ class ClientBookingCreate(BaseModel):
 
 
 class ClientBookingOut(BaseModel):
-    """Booking view for the client's "my bookings" list and detail modal."""
+    """Booking view for the client's "my bookings" list and detail modal.
+    Zones are admin-only, so only the room name is surfaced."""
     id: int
     event_name: str
     room: str
-    zone: str
     starts_at: datetime
     ends_at: datetime
     attendees: int
