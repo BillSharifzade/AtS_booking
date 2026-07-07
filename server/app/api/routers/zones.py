@@ -3,6 +3,7 @@ from datetime import date, timedelta
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_admin, current_user
 from app.db import get_session
@@ -16,7 +17,7 @@ from app.schemas import (
     ZoneUpdate,
 )
 from app.services import availability as avail
-from app.services.bookings import audit
+from app.services.bookings import audit, capacity_number
 
 router = APIRouter(prefix="/zones", tags=["zones"])
 
@@ -24,22 +25,22 @@ MAX_DAY_RANGE = 62
 
 
 async def _list_with_totals(session: AsyncSession) -> list[ZoneOut]:
-    # Zone capacity is the sum of its rooms' capacities (Module E).
+    # Zone capacity is the sum of its rooms' capacities (Module E). Capacity is now a
+    # free-text label, so we sum the number parsed out of each (unparseable → 0).
     stmt = (
-        select(
-            Zone.id,
-            Zone.name,
-            func.count(Room.id),
-            func.coalesce(func.sum(Room.capacity), 0),
-        )
-        .outerjoin(Room, Room.zone_id == Zone.id)
-        .group_by(Zone.id, Zone.name)
+        select(Zone)
+        .options(selectinload(Zone.rooms))
         .order_by(Zone.name)
     )
-    rows = (await session.execute(stmt)).all()
+    zones = (await session.execute(stmt)).scalars().all()
     return [
-        ZoneOut(id=zid, name=name, room_count=int(count), total_capacity=int(cap))
-        for zid, name, count, cap in rows
+        ZoneOut(
+            id=z.id,
+            name=z.name,
+            room_count=len(z.rooms),
+            total_capacity=sum(capacity_number(r.capacity) or 0 for r in z.rooms),
+        )
+        for z in zones
     ]
 
 

@@ -60,7 +60,7 @@ class RoomImagesIn(BaseModel):
 class RoomCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     zone_id: int
-    capacity: int = Field(gt=0)
+    capacity: str = Field(min_length=1, max_length=80)
     meter_squared: int | None = Field(default=None, ge=0)
     open_time: time
     close_time: time
@@ -72,7 +72,7 @@ class RoomCreate(BaseModel):
 class RoomUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
     zone_id: int | None = None
-    capacity: int | None = Field(default=None, gt=0)
+    capacity: str | None = Field(default=None, min_length=1, max_length=80)
     meter_squared: int | None = Field(default=None, ge=0)
     open_time: time | None = None
     close_time: time | None = None
@@ -87,7 +87,7 @@ class RoomOut(BaseModel):
     name: str
     zone_id: int
     zone_name: str
-    capacity: int
+    capacity: str
     meter_squared: int | None
     open_time: time
     close_time: time

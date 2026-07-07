@@ -354,7 +354,7 @@ export default function BookingDetailPage() {
                   .filter((r) => r.id !== b.room_id)
                   .map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.name} — зона {r.zone_name} (до {r.capacity} чел.)
+                      {r.name} — зона {r.zone_name} ({r.capacity})
                     </option>
                   ))}
               </select>

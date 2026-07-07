@@ -50,7 +50,10 @@ class Room(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False, unique=True)
     zone_id: Mapped[int] = mapped_column(ForeignKey("zones.id"), nullable=False, index=True)
-    capacity: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Free-text label, e.g. "10", "До 10 человек", "много". A best-effort number is
+    # parsed out of it (services.bookings.capacity_number) for overbooking checks and
+    # room recommendation; an unparseable label counts as "unknown" and never blocks.
+    capacity: Mapped[str] = mapped_column(String(80), nullable=False)
     # Floor area in square metres (admin-entered, optional).
     meter_squared: Mapped[int | None] = mapped_column(Integer)
     open_time: Mapped[time] = mapped_column(Time, nullable=False)

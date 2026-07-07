@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import local_now
 from app.models import Booking, BookingStatus, Room, RoomOfftime
-from app.services.bookings import rooms_with_capacity
+from app.services.bookings import _capacity_sort_key, room_fits, rooms_with_capacity
 
 SLOT = timedelta(minutes=30)
 MIN_DURATION = timedelta(minutes=30)
@@ -40,17 +40,15 @@ def _daterange(day_from: date, day_to: date):
 
 async def bookable_rooms(session: AsyncSession, zone_id: int, attendees: int) -> list[Room]:
     """Active, non-coffee rooms in the zone that hold ``attendees``, smallest first."""
-    stmt = (
-        select(Room)
-        .where(
-            Room.zone_id == zone_id,
-            Room.is_active.is_(True),
-            Room.is_coffee_break.is_(False),
-            Room.capacity >= attendees,
-        )
-        .order_by(Room.capacity, Room.name)
+    stmt = select(Room).where(
+        Room.zone_id == zone_id,
+        Room.is_active.is_(True),
+        Room.is_coffee_break.is_(False),
     )
-    return list((await session.execute(stmt)).scalars().all())
+    # Capacity is a free-text label — filter/sort by the parsed number in Python.
+    rooms = [r for r in (await session.execute(stmt)).scalars().all() if room_fits(r, attendees)]
+    rooms.sort(key=_capacity_sort_key)
+    return rooms
 
 
 async def _busy_by_room(

@@ -21,7 +21,7 @@ type FormState = {
 const EMPTY: FormState = {
   name: "",
   zone_id: "",
-  capacity: "10",
+  capacity: "",
   meter_squared: "",
   open_time: "08:00",
   close_time: "20:00",
@@ -78,7 +78,7 @@ export default function RoomsPage() {
       const payload = {
         name: form.name,
         zone_id: parseInt(form.zone_id, 10),
-        capacity: parseInt(form.capacity, 10),
+        capacity: form.capacity.trim(),
         meter_squared: form.meter_squared.trim() ? parseInt(form.meter_squared, 10) : null,
         open_time: form.open_time + ":00",
         close_time: form.close_time + ":00",
@@ -152,7 +152,7 @@ export default function RoomsPage() {
             </div>
             <div className="field"><label>Вместимость</label>
               <input value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })}
-                inputMode="numeric" /></div>
+                placeholder="напр. До 10 человек" />
           </div>
           <div className="row2">
             <div className="field"><label>Площадь, м²</label>

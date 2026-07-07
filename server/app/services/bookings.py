@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, time, timedelta, timezone
 
 from sqlalchemy import and_, func, or_, select
@@ -22,6 +23,30 @@ from app.models import (
 
 
 URGENT_THRESHOLD = timedelta(days=2)
+
+
+def capacity_number(text: str | None) -> int | None:
+    """Best-effort integer parsed out of a free-text capacity label
+    ("До 10 человек" → 10). Returns None when the label has no digits
+    ("много", ""), which callers treat as "unknown / unlimited"."""
+    if not text:
+        return None
+    m = re.search(r"\d+", text)
+    return int(m.group()) if m else None
+
+
+def room_fits(room: Room, attendees: int) -> bool:
+    """Whether a room's capacity can hold ``attendees``. An unparseable label
+    (no number) is treated as sufficient so a descriptive value like «много»
+    never blocks a booking."""
+    cap = capacity_number(room.capacity)
+    return cap is None or cap >= attendees
+
+
+def _capacity_sort_key(room: Room) -> tuple[bool, int, str]:
+    """Order rooms smallest-sufficient first; unknown-capacity rooms sort last."""
+    cap = capacity_number(room.capacity)
+    return (cap is None, cap or 0, room.name)
 
 # Valid seating arrangements ("Расстановка"). Kept as a plain set so a future dynamic
 # layout builder can extend it. Mirrors schemas.ROOM_STRUCTS.
@@ -179,18 +204,15 @@ async def rooms_with_capacity(
 ) -> list[Room]:
     """Active rooms that hold ``attendees``, are open at that time, and have no conflict.
     Ordered by smallest sufficient capacity first. Optionally scoped to one zone."""
-    stmt = (
-        select(Room)
-        .where(
-            Room.is_active.is_(True),
-            Room.is_coffee_break.is_(False),
-            Room.capacity >= attendees,
-        )
-        .order_by(Room.capacity, Room.name)
+    stmt = select(Room).where(
+        Room.is_active.is_(True),
+        Room.is_coffee_break.is_(False),
     )
     if zone_id is not None:
         stmt = stmt.where(Room.zone_id == zone_id)
-    rooms = (await session.execute(stmt)).scalars().all()
+    # Capacity is a free-text label, so the fit test/ordering happen in Python.
+    rooms = [r for r in (await session.execute(stmt)).scalars().all() if room_fits(r, attendees)]
+    rooms.sort(key=_capacity_sort_key)
     out: list[Room] = []
     for room in rooms:
         if exclude_id is not None and room.id == exclude_id:
@@ -237,11 +259,11 @@ async def create_booking(
     props: list[tuple[int, int]] | None = None,
 ) -> Booking:
     validate_window(room, starts_at, ends_at)
-    if attendees > room.capacity:
+    if not room_fits(room, attendees):
         alts = await rooms_with_capacity(session, attendees, starts_at, ends_at, exclude_id=room.id)
-        head = f"Вместимость «{room.name}» — {room.capacity} чел., а участников {attendees}."
+        head = f"Вместимость «{room.name}» — {room.capacity}, а участников {attendees}."
         if alts:
-            names = "; ".join(f"«{r.name}» (зона {r.zone.name}, до {r.capacity} чел.)" for r in alts[:5])
+            names = "; ".join(f"«{r.name}» (зона {r.zone.name}, {r.capacity})" for r in alts[:5])
             raise BookingError(f"{head} Подходящие помещения: {names}.")
         raise BookingError(f"{head} Нет свободных помещений с нужной вместимостью на это время.")
     # Coffee break: a dedicated coffee-break room is no longer required (an admin can
@@ -382,9 +404,9 @@ async def reassign_booking(
     if room is not None:
         if not room.is_active or room.is_coffee_break:
             raise BookingError("Это помещение недоступно для бронирования.")
-        if room.capacity < booking.attendees:
+        if not room_fits(room, booking.attendees):
             raise BookingError(
-                f"Вместимость «{room.name}» — {room.capacity} чел., а участников {booking.attendees}."
+                f"Вместимость «{room.name}» — {room.capacity}, а участников {booking.attendees}."
             )
         validate_window(room, booking.starts_at, booking.ends_at)
         if await has_conflict(
@@ -395,18 +417,18 @@ async def reassign_booking(
             raise BookingError(f"«{room.name}» недоступно в это время (запланирован простой).")
         target = room
     elif zone_id is not None:
-        stmt = (
-            select(Room)
-            .where(
-                Room.is_active.is_(True),
-                Room.is_coffee_break.is_(False),
-                Room.zone_id == zone_id,
-                Room.capacity >= booking.attendees,
-            )
-            .order_by(Room.capacity, Room.name)
+        stmt = select(Room).where(
+            Room.is_active.is_(True),
+            Room.is_coffee_break.is_(False),
+            Room.zone_id == zone_id,
         )
+        candidates = [
+            r for r in (await session.execute(stmt)).scalars().all()
+            if room_fits(r, booking.attendees)
+        ]
+        candidates.sort(key=_capacity_sort_key)
         target = None
-        for r in (await session.execute(stmt)).scalars().all():
+        for r in candidates:
             try:
                 validate_window(r, booking.starts_at, booking.ends_at)
             except BookingError:

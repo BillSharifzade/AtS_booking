@@ -83,7 +83,7 @@ async def _zones_out(session: AsyncSession) -> list[ZoneOut]:
         if bookable:
             out.append(ZoneOut(
                 id=z.id, name=z.name, room_count=len(bookable),
-                total_capacity=sum(r.capacity for r in bookable),
+                total_capacity=sum(svc.capacity_number(r.capacity) or 0 for r in bookable),
                 photos=photos_by_zone.get(z.id, [])[:8],
             ))
     return out

@@ -50,7 +50,7 @@ export type Room = {
   name: string;
   zone_id: number;
   zone_name: string;
-  capacity: number;
+  capacity: string;
   meter_squared: number | null;
   open_time: string;
   close_time: string;

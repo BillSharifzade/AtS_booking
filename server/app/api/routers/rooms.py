@@ -54,7 +54,7 @@ async def create_room(
     await session.flush()
     kind = "кофе-брейк" if room.is_coffee_break else "помещение"
     detail = (
-        f"«{room.name}» ({kind}), зона {zone.name}, до {room.capacity} чел., "
+        f"«{room.name}» ({kind}), зона {zone.name}, {room.capacity}, "
         f"{room.open_time.strftime('%H:%M')}–{room.close_time.strftime('%H:%M')}"
     )
     await audit(session, admin_id, "room.create", "room", room.id, detail)
