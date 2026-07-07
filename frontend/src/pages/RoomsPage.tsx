@@ -153,6 +153,7 @@ export default function RoomsPage() {
             <div className="field"><label>Вместимость</label>
               <input value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })}
                 placeholder="напр. До 10 человек" />
+            </div>
           </div>
           <div className="row2">
             <div className="field"><label>Площадь, м²</label>
