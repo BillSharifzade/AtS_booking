@@ -56,6 +56,38 @@ function fmt(dt: string) {
   return new Date(dt).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
+function IconUsers() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+
+function IconArea() {
+  return (
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+      <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+      <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+      <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
+function IconRoom() {
+  return (
+    <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <path d="M3 21h18" />
+      <path d="M5 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16" />
+      <path d="M9 8h.01M9 12h.01M15 8h.01M15 12h.01" />
+    </svg>
+  );
+}
+
 export default function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -212,27 +244,28 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         <Section title="Помещение, участники и время">
           <Field label="Помещение">
             {boot.rooms.length > 0 ? (
-              <div className="zone-grid">
+              <div className="room-grid">
                 {boot.rooms.map((r: Room) => (
                   <button
                     key={r.id}
-                    className={`zone-card ${form.room_id === r.id ? "on" : ""}`}
+                    className={`room-card ${form.room_id === r.id ? "on" : ""}`}
                     onClick={() => { set({ room_id: r.id, slot: { date: "", start: "", end: "" } }); haptic(); }}
                   >
-                    <div className="zone-photo">
+                    <div className="room-photo">
                       {r.photos.length > 0 ? (
                         <img src={roomImageUrl(r.id, r.photos[0])} alt={r.name} loading="lazy" />
                       ) : (
-                        <span className="zone-photo-empty">Без фото</span>
+                        <span className="room-photo-empty"><IconRoom /></span>
                       )}
-                      {r.photos.length > 1 && <span className="zone-photo-count">{r.photos.length} фото</span>}
-                      {form.room_id === r.id && <span className="zone-check">✓</span>}
+                      {r.photos.length > 1 && <span className="room-photo-count">{r.photos.length} фото</span>}
+                      <span className="room-check" aria-hidden>✓</span>
                     </div>
-                    <div className="zone-info">
-                      <span className="zone-name">{r.name}</span>
-                      <span className="zone-cap">
-                        {r.capacity}{r.meter_squared ? ` · ${r.meter_squared} м²` : ""}
-                      </span>
+                    <div className="room-info">
+                      <span className="room-name">{r.name}</span>
+                      <div className="room-meta">
+                        <span className="room-chip"><IconUsers />{r.capacity}</span>
+                        {r.meter_squared ? <span className="room-chip alt"><IconArea />{r.meter_squared} м²</span> : null}
+                      </div>
                     </div>
                   </button>
                 ))}
