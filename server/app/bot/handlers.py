@@ -29,8 +29,8 @@ from app.db import SessionLocal
 from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage
 from app.services import availability as avail
 from app.services import bookings as svc
-from app.services.bookings import GRADES
-from app.schemas import GRADES as GRADE_ORDER
+from app.services.bookings import GRADES, is_koinoti
+from app.schemas import EVENT_TYPES, GRADES as GRADE_ORDER
 from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
 from app.services.ratelimit import allow
 from app.services.reports import build_bookings_workbook, report_filename
@@ -59,12 +59,16 @@ class Booking_FSM(StatesGroup):
     pick_end = State()
     company = State()
     name = State()
+    position = State()
     phone = State()
     event_type = State()
     event_name = State()
     description = State()
     aim = State()
     grade = State()
+    trainer = State()
+    target_employees = State()
+    department = State()
     extra_services = State()
     coffee = State()
     coffee_count = State()
@@ -93,6 +97,17 @@ def _grade_kb() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=True,
     )
+
+
+def _event_type_kb() -> ReplyKeyboardMarkup:
+    # Two event-type formats per row.
+    rows = [
+        [KeyboardButton(text=EVENT_TYPES[i]), KeyboardButton(text=EVENT_TYPES[i + 1])]
+        for i in range(0, len(EVENT_TYPES) - 1, 2)
+    ]
+    if len(EVENT_TYPES) % 2:
+        rows.append([KeyboardButton(text=EVENT_TYPES[-1])])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True, one_time_keyboard=True)
 
 
 @router.message(CommandStart())
@@ -460,6 +475,13 @@ async def get_company(msg: Message, state: FSMContext) -> None:
 @router.message(Booking_FSM.name)
 async def get_name(msg: Message, state: FSMContext) -> None:
     await state.update_data(contact_name=msg.text.strip())
+    await state.set_state(Booking_FSM.position)
+    await msg.answer(t.ENTER_POSITION)
+
+
+@router.message(Booking_FSM.position)
+async def get_position(msg: Message, state: FSMContext) -> None:
+    await state.update_data(position=msg.text.strip())
     await state.set_state(Booking_FSM.phone)
     await msg.answer(t.ENTER_PHONE)
 
@@ -468,14 +490,18 @@ async def get_name(msg: Message, state: FSMContext) -> None:
 async def get_phone(msg: Message, state: FSMContext) -> None:
     await state.update_data(phone=msg.text.strip())
     await state.set_state(Booking_FSM.event_type)
-    await msg.answer(t.ENTER_EVENT_TYPE)
+    await msg.answer(t.PICK_EVENT_TYPE, reply_markup=_event_type_kb())
 
 
 @router.message(Booking_FSM.event_type)
 async def get_event_type(msg: Message, state: FSMContext) -> None:
-    await state.update_data(event_type=msg.text.strip())
+    event_type = msg.text.strip()
+    if event_type not in EVENT_TYPES:
+        await msg.answer(t.INVALID_EVENT_TYPE, reply_markup=_event_type_kb())
+        return
+    await state.update_data(event_type=event_type)
     await state.set_state(Booking_FSM.event_name)
-    await msg.answer(t.ENTER_EVENT_NAME)
+    await msg.answer(t.ENTER_EVENT_NAME, reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(Booking_FSM.event_name)
@@ -508,8 +534,40 @@ async def get_grade(msg: Message, state: FSMContext) -> None:
         await msg.answer(t.INVALID_GRADE, reply_markup=_grade_kb())
         return
     await state.update_data(grade=grade)
+    await state.set_state(Booking_FSM.trainer)
+    await msg.answer(t.ENTER_TRAINER, reply_markup=ReplyKeyboardRemove())
+
+
+@router.message(Booking_FSM.trainer)
+async def get_trainer(msg: Message, state: FSMContext) -> None:
+    trainer = msg.text.strip()
+    await state.update_data(trainer=None if trainer == "-" else trainer)
+    await state.set_state(Booking_FSM.target_employees)
+    await msg.answer(t.ENTER_TARGET_EMPLOYEES)
+
+
+@router.message(Booking_FSM.target_employees)
+async def get_target_employees(msg: Message, state: FSMContext) -> None:
+    await state.update_data(target_employees=msg.text.strip())
+    data = await state.get_data()
+    # КОИНОТИ НАВ events additionally require the participant's department/отдел.
+    if is_koinoti(data.get("company")):
+        await state.set_state(Booking_FSM.department)
+        await msg.answer(t.ENTER_DEPARTMENT)
+    else:
+        await state.set_state(Booking_FSM.extra_services)
+        await msg.answer(t.ENTER_EXTRA_SERVICES)
+
+
+@router.message(Booking_FSM.department)
+async def get_department(msg: Message, state: FSMContext) -> None:
+    dept = msg.text.strip()
+    if not dept or dept == "-":
+        await msg.answer(t.ENTER_DEPARTMENT)
+        return
+    await state.update_data(department=dept)
     await state.set_state(Booking_FSM.extra_services)
-    await msg.answer(t.ENTER_EXTRA_SERVICES, reply_markup=ReplyKeyboardRemove())
+    await msg.answer(t.ENTER_EXTRA_SERVICES)
 
 
 @router.message(Booking_FSM.extra_services)
@@ -650,6 +708,10 @@ async def _show_confirm(msg: Message, state: FSMContext) -> None:
         f"Описание: {esc(data.get('description')) or '—'}\n"
         f"Цель: {esc(data.get('aim')) or '—'}\n"
         f"Грейд: {esc(data.get('grade')) or '—'}\n"
+        f"Должность заявителя: {esc(data.get('position')) or '—'}\n"
+        f"Тренер: {esc(data.get('trainer')) or '—'}\n"
+        + (f"Департамент: {esc(data['department'])}\n" if data.get("department") else "")
+        + f"Для сотрудников: {esc(data.get('target_employees')) or '—'}\n"
         f"Доп. услуги: {esc(data.get('extra_services')) or '—'}\n"
         f"Участников: {data['attendees']}\n"
         + _coffee_summary(data)
@@ -703,6 +765,10 @@ async def confirm(msg: Message, state: FSMContext) -> None:
                 aim=data.get("aim"),
                 grade=data.get("grade"),
                 extra_services=data.get("extra_services"),
+                position=data.get("position"),
+                trainer=data.get("trainer"),
+                department=data.get("department"),
+                target_employees=data.get("target_employees"),
                 attendees=data["attendees"],
                 coffee_break=data["coffee"],
                 coffee_headcount=data.get("coffee_count"),
@@ -886,6 +952,14 @@ async def my(msg: Message) -> None:
         extra: list[str] = []
         if b.grade:
             extra.append(f"  грейд: {esc(b.grade)}")
+        if b.position:
+            extra.append(f"  должность: {esc(b.position)}")
+        if b.trainer:
+            extra.append(f"  тренер: {esc(b.trainer)}")
+        if b.department:
+            extra.append(f"  департамент: {esc(b.department)}")
+        if b.target_employees:
+            extra.append(f"  для сотрудников: {esc(b.target_employees)}")
         if b.aim:
             extra.append(f"  цель: {esc(b.aim)}")
         if b.extra_services:

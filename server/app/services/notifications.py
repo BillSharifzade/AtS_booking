@@ -67,10 +67,18 @@ def _booking_card(booking: Booking, room: Room, *, show_zone: bool = False) -> s
     if booking.room_struct:
         struct = f"Расстановка: {ROOM_STRUCT_LABELS.get(booking.room_struct, booking.room_struct)}\n"
     extras = ""
+    if booking.position:
+        extras += f"Должность заявителя: {esc(booking.position)}\n"
+    if booking.department:
+        extras += f"Департамент: {esc(booking.department)}\n"
+    if booking.trainer:
+        extras += f"Тренер: {esc(booking.trainer)}\n"
     if booking.grade:
         extras += f"Грейд: {esc(booking.grade)}\n"
     if booking.aim:
         extras += f"Цель: {esc(booking.aim)}\n"
+    if booking.target_employees:
+        extras += f"Для сотрудников: {esc(booking.target_employees)}\n"
     if booking.extra_services:
         extras += f"Доп. услуги: {esc(booking.extra_services)}\n"
     room_line = f"Помещение: {esc(room.name)}"

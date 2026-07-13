@@ -24,6 +24,20 @@ export const GRADES = [
   "Руководитель департамента",
 ];
 
+// Event formats ("Тип мероприятия") — fixed dropdown, mirrors backend EVENT_TYPES.
+export const EVENT_TYPES = [
+  "Тренинг",
+  "Воркшоп",
+  "Модуль",
+  "Презентация",
+  "Собрание",
+  "Мастер-класс",
+];
+
+// КОИНОТИ НАВ events require the participant's department/отдел to be specified.
+const KOINOTI_RE = /ко[ий]?ноти\s*нав|koinoti\s*nav/i;
+export const isKoinoti = (company: string): boolean => KOINOTI_RE.test(company || "");
+
 // Participation-rules acknowledgement (#4). Files/links are placeholders until the
 // real documents are supplied — edit RULES_LINKS to point at the actual URLs.
 export const RULES_INTRO =
@@ -41,7 +55,7 @@ export const RULES_LINKS: { label: string; url: string }[] = [
 export const STATUS_LABELS: Record<Status, string> = {
   new: "новая",
   processing: "в обработке",
-  approved: "подтверждена",
+  approved: "подтверждён",
   rejected: "отклонена",
   completed: "завершена",
   archived: "архив",

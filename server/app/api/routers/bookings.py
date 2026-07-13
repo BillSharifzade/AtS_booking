@@ -202,6 +202,10 @@ async def create_booking_endpoint(
             aim=payload.aim,
             grade=payload.grade,
             extra_services=payload.extra_services,
+            position=payload.position,
+            trainer=payload.trainer,
+            department=payload.department,
+            target_employees=payload.target_employees,
             privacy_accepted=payload.privacy_accepted,
             props=[(p.prop_id, p.amount) for p in payload.props],
         )

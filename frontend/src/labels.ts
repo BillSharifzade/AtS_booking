@@ -3,11 +3,25 @@ import type { Status } from "./api";
 export const STATUS_LABELS: Record<Status, string> = {
   new: "новая",
   processing: "в обработке",
-  approved: "подтверждена",
+  approved: "Подтверждён",
   rejected: "отклонена",
   completed: "завершена",
   archived: "архив",
 };
+
+// Event formats ("Тип мероприятия") — fixed dropdown, mirrors backend EVENT_TYPES.
+export const EVENT_TYPES = [
+  "Тренинг",
+  "Воркшоп",
+  "Модуль",
+  "Презентация",
+  "Собрание",
+  "Мастер-класс",
+];
+
+// КОИНОТИ НАВ events require the participant's department/отдел to be specified.
+const KOINOTI_RE = /ко[ий]?ноти\s*нав|koinoti\s*nav/i;
+export const isKoinoti = (company: string): boolean => KOINOTI_RE.test(company || "");
 
 export const COFFEE_STATUS_LABELS: Record<string, string> = {
   pending: "ожидает",

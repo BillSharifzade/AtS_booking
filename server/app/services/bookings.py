@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,15 +24,45 @@ from app.models import (
 
 URGENT_THRESHOLD = timedelta(days=2)
 
+# Global operating window for events: no earlier than 08:30, no later than 17:30.
+# Rooms may still declare their own (narrower) hours; the effective window is the
+# intersection of the room's hours and this business window.
+BUSINESS_OPEN = time(8, 30)
+BUSINESS_CLOSE = time(17, 30)
+
+
+def effective_open(room: Room) -> time:
+    """Earliest bookable start for a room: max of its open time and the business open."""
+    return max(room.open_time, BUSINESS_OPEN)
+
+
+def effective_close(room: Room) -> time:
+    """Latest bookable end for a room: min of its close time and the business close."""
+    return min(room.close_time, BUSINESS_CLOSE)
+
+
+def is_sunday(dt: datetime | date) -> bool:
+    """Whether a date/datetime falls on a Sunday (bookings are not allowed then)."""
+    return dt.weekday() == 6
+
+
+_KOINOTI_RE = re.compile(r"ко[ий]?ноти\s*нав|koinoti\s*nav", re.IGNORECASE)
+
+
+def is_koinoti(company: str | None) -> bool:
+    """Whether a company label refers to КОИНОТИ НАВ (department is required for it)."""
+    return bool(company and _KOINOTI_RE.search(company))
+
 
 def capacity_number(text: str | None) -> int | None:
-    """Best-effort integer parsed out of a free-text capacity label
-    ("До 10 человек" → 10). Returns None when the label has no digits
-    ("много", ""), which callers treat as "unknown / unlimited"."""
+    """Best-effort integer parsed out of a free-text capacity label.
+    Uses the LARGEST number present, so a range like "10-12" → 12 (the room
+    genuinely holds 12) and "До 10 человек" → 10. Returns None when the label has
+    no digits ("много", ""), which callers treat as "unknown / unlimited"."""
     if not text:
         return None
-    m = re.search(r"\d+", text)
-    return int(m.group()) if m else None
+    nums = re.findall(r"\d+", text)
+    return max(int(n) for n in nums) if nums else None
 
 
 def room_fits(room: Room, attendees: int) -> bool:
@@ -146,11 +176,15 @@ def validate_window(room: Room, starts_at: datetime, ends_at: datetime) -> None:
         raise BookingError("Время окончания должно быть позже времени начала.")
     if starts_at.date() != ends_at.date():
         raise BookingError("Мероприятие должно начаться и закончиться в один день.")
+    if is_sunday(starts_at):
+        raise BookingError("Бронирование в воскресенье недоступно. Выберите другой день.")
     s = _to_local_time(starts_at)
     e = _to_local_time(ends_at)
-    if s < room.open_time or e > room.close_time:
+    open_t = effective_open(room)
+    close_t = effective_close(room)
+    if s < open_t or e > close_t:
         raise BookingError(
-            f"Помещение работает с {room.open_time.strftime('%H:%M')} до {room.close_time.strftime('%H:%M')}."
+            f"Мероприятие можно проводить с {open_t.strftime('%H:%M')} до {close_t.strftime('%H:%M')}."
         )
 
 
@@ -255,6 +289,10 @@ async def create_booking(
     aim: str | None = None,
     grade: str | None = None,
     extra_services: str | None = None,
+    position: str | None = None,
+    trainer: str | None = None,
+    department: str | None = None,
+    target_employees: str | None = None,
     privacy_accepted: bool = False,
     props: list[tuple[int, int]] | None = None,
 ) -> Booking:
@@ -291,6 +329,13 @@ async def create_booking(
         raise BookingError("Неизвестный грейд.")
     aim_val = (aim or "").strip() or None
     extra_services_val = (extra_services or "").strip() or None
+    position_val = (position or "").strip() or None
+    trainer_val = (trainer or "").strip() or None
+    target_employees_val = (target_employees or "").strip() or None
+    # КОИНОТИ НАВ events must specify the participant's department/отдел.
+    department_val = (department or "").strip() or None
+    if is_koinoti(company) and department_val is None:
+        raise BookingError("Для мероприятий КОИНОТИ НАВ укажите департамент/отдел.")
     # Validate prop stock up-front so we don't create a booking we can't fulfil.
     resolved_props = await validate_props(session, props or [])
 
@@ -309,6 +354,10 @@ async def create_booking(
         aim=aim_val,
         grade=grade_val,
         extra_services=extra_services_val,
+        position=position_val,
+        trainer=trainer_val,
+        department=department_val,
+        target_employees=target_employees_val,
         privacy_accepted=privacy_accepted,
         attendees=attendees,
         room_struct=room_struct,

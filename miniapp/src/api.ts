@@ -56,6 +56,10 @@ export type ClientBooking = {
   aim: string | null;
   grade: string | null;
   extra_services: string | null;
+  position: string | null;
+  trainer: string | null;
+  department: string | null;
+  target_employees: string | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
   coffee_type: string | null;
@@ -77,6 +81,10 @@ export type NewBooking = {
   aim: string | null;
   grade: string | null;
   extra_services: string | null;
+  position: string | null;
+  trainer: string | null;
+  department: string | null;
+  target_employees: string | null;
   attendees: number;
   room_struct: RoomStruct | null;
   coffee_break: boolean;

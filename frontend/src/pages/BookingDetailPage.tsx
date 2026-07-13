@@ -102,6 +102,10 @@ export default function BookingDetailPage() {
             <div className="k">Описание</div><div>{b.description || "—"}</div>
             <div className="k">Цель бронирования</div><div>{b.aim || "—"}</div>
             <div className="k">Грейд</div><div>{b.grade || "—"}</div>
+            <div className="k">Должность заявителя</div><div>{b.position || "—"}</div>
+            <div className="k">Тренер</div><div>{b.trainer || "—"}</div>
+            {b.department && (<><div className="k">Департамент</div><div>{b.department}</div></>)}
+            <div className="k">Для сотрудников</div><div>{b.target_employees || "—"}</div>
             <div className="k">Доп. услуги</div><div>{b.extra_services || "—"}</div>
             <div className="k">Помещение</div><div>{b.room.name} (зона {b.room.zone_name})</div>
             <div className="k">Начало</div><div>{fmt(b.starts_at)}</div>

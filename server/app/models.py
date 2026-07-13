@@ -126,6 +126,14 @@ class Booking(Base):
     # Extra services the client needs on-site ("Дополнительные услуги", free text —
     # e.g. расстановка мебели, техническая поддержка на месте, …).
     extra_services: Mapped[str | None] = mapped_column(Text)
+    # Applicant's job title ("Должность заявителя", free text).
+    position: Mapped[str | None] = mapped_column(String(200))
+    # Event trainer ("Тренер мероприятия") — surfaced in the AtS group broadcast template.
+    trainer: Mapped[str | None] = mapped_column(String(200))
+    # Department ("Департамент/Отдел") — required only when the company is КОИНОТИ НАВ.
+    department: Mapped[str | None] = mapped_column(String(200))
+    # Who the training is intended for ("Для каких сотрудников предназначен тренинг").
+    target_employees: Mapped[str | None] = mapped_column(Text)
     attendees: Mapped[int] = mapped_column(Integer, nullable=False)
     # Seating arrangement ("Расстановка"): theatre / class / banquet / u_shaped.
     # Stored as a plain string (not an enum) so a dynamic layout builder can

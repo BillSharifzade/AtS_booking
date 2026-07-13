@@ -110,6 +110,16 @@ GRADES = [
     "Руководитель департамента",
 ]
 
+# Event formats ("Тип мероприятия") — a fixed dropdown. Order defines how the UIs list it.
+EVENT_TYPES = [
+    "Тренинг",
+    "Воркшоп",
+    "Модуль",
+    "Презентация",
+    "Собрание",
+    "Мастер-класс",
+]
+
 
 class PropRequest(BaseModel):
     prop_id: int
@@ -132,6 +142,10 @@ class BookingCreate(BaseModel):
     aim: str | None = Field(default=None, max_length=300)
     grade: str | None = None
     extra_services: str | None = None
+    position: str | None = Field(default=None, max_length=200)
+    trainer: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=200)
+    target_employees: str | None = None
     attendees: int = Field(gt=0)
     room_struct: str | None = None
     coffee_break: bool = False
@@ -163,6 +177,10 @@ class BookingOut(BaseModel):
     aim: str | None
     grade: str | None
     extra_services: str | None
+    position: str | None
+    trainer: str | None
+    department: str | None
+    target_employees: str | None
     attendees: int
     room_struct: str | None
     coffee_break: bool
@@ -613,6 +631,10 @@ class ClientBookingCreate(BaseModel):
     aim: str | None = Field(default=None, max_length=300)
     grade: str | None = None
     extra_services: str | None = None
+    position: str | None = Field(default=None, max_length=200)
+    trainer: str | None = Field(default=None, max_length=200)
+    department: str | None = Field(default=None, max_length=200)
+    target_employees: str | None = None
     attendees: int = Field(gt=0)
     room_struct: str | None = None
     coffee_break: bool = False
@@ -650,6 +672,10 @@ class ClientBookingOut(BaseModel):
     aim: str | None = None
     grade: str | None = None
     extra_services: str | None = None
+    position: str | None = None
+    trainer: str | None = None
+    department: str | None = None
+    target_employees: str | None = None
     coffee_break: bool = False
     coffee_headcount: int | None = None
     coffee_type: str | None = None

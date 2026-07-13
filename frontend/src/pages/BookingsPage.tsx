@@ -8,7 +8,7 @@ import { TableSkeleton } from "../components/Skeleton";
 import KanbanBoard from "../components/KanbanBoard";
 import DateTimePicker from "../components/DateTimePicker";
 import RoomStructPicker from "../components/RoomStructPicker";
-import { GRADES } from "../labels";
+import { EVENT_TYPES, GRADES, isKoinoti } from "../labels";
 import { useNotifications } from "../notifications";
 
 const VIEW_KEY = "ats_bookings_view";
@@ -47,6 +47,10 @@ type FormState = {
   aim: string;
   grade: string;
   extra_services: string;
+  position: string;
+  trainer: string;
+  department: string;
+  target_employees: string;
   attendees: string;
   coffee_break: boolean;
   coffee_headcount: string;
@@ -75,6 +79,10 @@ const EMPTY_FORM: FormState = {
   aim: "",
   grade: "",
   extra_services: "",
+  position: "",
+  trainer: "",
+  department: "",
+  target_employees: "",
   attendees: "1",
   coffee_break: false,
   coffee_headcount: "",
@@ -161,6 +169,10 @@ export default function BookingsPage() {
         aim: form.aim.trim() || null,
         grade: form.grade || null,
         extra_services: form.extra_services.trim() || null,
+        position: form.position.trim() || null,
+        trainer: form.trainer.trim() || null,
+        department: isKoinoti(form.company) ? form.department.trim() || null : null,
+        target_employees: form.target_employees.trim() || null,
         attendees: parseInt(form.attendees, 10),
         coffee_break: form.coffee_break,
         coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
@@ -182,6 +194,17 @@ export default function BookingsPage() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  const confirmFromList = async (id: number) => {
+    setConfirmingId(id);
+    try {
+      await api.approve(id);
+      load();
+    } finally {
+      setConfirmingId(null);
     }
   };
 
@@ -238,6 +261,7 @@ export default function BookingsPage() {
               <th>Окончание</th>
               <th>Чел.</th>
               <th>Статус</th>
+              {admin && <th>Подтв.</th>}
             </tr>
           </thead>
           <tbody>
@@ -265,6 +289,24 @@ export default function BookingsPage() {
                 <td>
                   <StatusBadge status={b.status} />
                 </td>
+                {admin && (
+                  <td onClick={(e) => e.stopPropagation()}>
+                    {b.status === "new" || b.status === "processing" ? (
+                      <input
+                        type="checkbox"
+                        title="Подтвердить заявку"
+                        disabled={confirmingId === b.id}
+                        checked={false}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={() => confirmFromList(b.id)}
+                      />
+                    ) : b.status === "approved" ? (
+                      <span title="Подтверждён" style={{ color: "var(--accent, #2a5bd7)" }}>✓</span>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -312,8 +354,24 @@ export default function BookingsPage() {
                     <div className="field"><label>Название мероприятия</label>
                       <input value={form.event_name} onChange={(e) => setForm({ ...form, event_name: e.target.value })} /></div>
                     <div className="field"><label>Тип мероприятия</label>
-                      <input value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })} placeholder="совещание, тренинг…" /></div>
+                      <select value={form.event_type} onChange={(e) => setForm({ ...form, event_type: e.target.value })}>
+                        <option value="">— выберите тип —</option>
+                        {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select></div>
                   </div>
+                  <div className="row2">
+                    <div className="field"><label>Должность заявителя</label>
+                      <input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} placeholder="напр. HR-менеджер" /></div>
+                    <div className="field"><label>Тренер мероприятия</label>
+                      <input value={form.trainer} onChange={(e) => setForm({ ...form, trainer: e.target.value })} placeholder="ФИО тренера" /></div>
+                  </div>
+                  {isKoinoti(form.company) && (
+                    <div className="field"><label>Департамент / Отдел (КОИНОТИ НАВ)</label>
+                      <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="напр. Департамент цифровизации" /></div>
+                  )}
+                  <div className="field"><label>Для каких сотрудников предназначен тренинг</label>
+                    <textarea rows={2} value={form.target_employees} onChange={(e) => setForm({ ...form, target_employees: e.target.value })}
+                      placeholder="напр. руководители отделов продаж" /></div>
                   <div className="field"><label>Описание</label>
                     <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></div>
 

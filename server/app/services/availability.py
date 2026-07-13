@@ -18,7 +18,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import local_now
 from app.models import Booking, BookingStatus, Room, RoomOfftime
-from app.services.bookings import _capacity_sort_key, room_fits, rooms_with_capacity
+from app.services.bookings import (
+    _capacity_sort_key,
+    effective_close,
+    effective_open,
+    room_fits,
+    rooms_with_capacity,
+)
 
 SLOT = timedelta(minutes=30)
 MIN_DURATION = timedelta(minutes=30)
@@ -104,13 +110,18 @@ def _day_starts(
     rooms: list[Room], day: date, busy_by_room: dict[int, list[Interval]], now: datetime
 ) -> list[tuple[time, time]]:
     """Free start times (30-min grid) for the zone on ``day``, each with the latest
-    end reachable within a single room's free interval. Past times are excluded."""
+    end reachable within a single room's free interval. Past times are excluded.
+    Sundays are never bookable, and the window is clamped to the business hours."""
+    # No bookings on Sundays.
+    if day.weekday() == 6:
+        return []
     intervals: list[Interval] = []
     overall_open: datetime | None = None
     overall_close: datetime | None = None
     for room in rooms:
-        open_dt = _combine(day, room.open_time)
-        close_dt = _combine(day, room.close_time)
+        # Clamp each room's hours to the global business window (08:30–17:30).
+        open_dt = _combine(day, effective_open(room))
+        close_dt = _combine(day, effective_close(room))
         if close_dt <= open_dt:
             continue
         overall_open = open_dt if overall_open is None else min(overall_open, open_dt)

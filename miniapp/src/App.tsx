@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { GRADES, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { EVENT_TYPES, GRADES, isKoinoti, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
@@ -27,6 +27,10 @@ type Form = {
   aim: string;
   grade: string;
   extra_services: string;
+  position: string;
+  trainer: string;
+  department: string;
+  target_employees: string;
   contact_name: string;
   phone: string;
   coffee_break: boolean;
@@ -43,6 +47,7 @@ const emptyForm = (name: string): Form => ({
   company_id: null, company: "", room_id: null, attendees: "10",
   slot: { date: "", start: "", end: "" }, room_struct: null, props: {},
   event_name: "", event_type: "", description: "", aim: "", grade: "", extra_services: "",
+  position: "", trainer: "", department: "", target_employees: "",
   contact_name: name, phone: "",
   coffee_break: false, coffee_headcount: "", coffee_type: "standard", coffee_other: "", foreign_guests: false,
   is_urgent: false,
@@ -143,6 +148,8 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       case 2: return true; // room_struct optional
       case 3: return true; // props optional
       case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.aim.trim() && form.grade &&
+        form.position.trim() && form.trainer.trim() && form.target_employees.trim() &&
+        (!isKoinoti(form.company) || form.department.trim()) &&
         form.contact_name.trim() && form.phone.trim() &&
         (!form.coffee_break || (form.coffee_headcount && (form.coffee_type !== "other" || form.coffee_other.trim()))));
       case 5: return form.agree.every(Boolean); // must acknowledge every document
@@ -167,6 +174,10 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       aim: form.aim.trim() || null,
       grade: form.grade || null,
       extra_services: form.extra_services.trim() || null,
+      position: form.position.trim() || null,
+      trainer: form.trainer.trim() || null,
+      department: isKoinoti(form.company) ? form.department.trim() || null : null,
+      target_employees: form.target_employees.trim() || null,
       privacy_accepted: form.agree.every(Boolean),
       attendees: attendeesNum,
       room_struct: form.room_struct,
@@ -332,7 +343,12 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         <Section title="Детали мероприятия">
           <div className="grid2">
             <Field label="Название"><input value={form.event_name} onChange={(e) => set({ event_name: e.target.value })} placeholder="напр. Стратегическая сессия" /></Field>
-            <Field label="Тип"><input value={form.event_type} onChange={(e) => set({ event_type: e.target.value })} placeholder="совещание, тренинг…" /></Field>
+            <Field label="Тип мероприятия">
+              <select value={form.event_type} onChange={(e) => set({ event_type: e.target.value })}>
+                <option value="">— выберите тип —</option>
+                {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </Field>
           </div>
           <div className="grid2">
             <Field label="Цель бронирования"><input value={form.aim} onChange={(e) => set({ aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></Field>
@@ -343,6 +359,19 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
               </select>
             </Field>
           </div>
+          <div className="grid2">
+            <Field label="Должность заявителя"><input value={form.position} onChange={(e) => set({ position: e.target.value })} placeholder="напр. HR-менеджер" /></Field>
+            <Field label="Тренер мероприятия"><input value={form.trainer} onChange={(e) => set({ trainer: e.target.value })} placeholder="ФИО тренера" /></Field>
+          </div>
+          {isKoinoti(form.company) && (
+            <Field label="Департамент / Отдел">
+              <input value={form.department} onChange={(e) => set({ department: e.target.value })} placeholder="напр. Департамент цифровизации" />
+            </Field>
+          )}
+          <Field label="Для каких сотрудников предназначен тренинг">
+            <textarea rows={2} value={form.target_employees} onChange={(e) => set({ target_employees: e.target.value })}
+              placeholder="напр. руководители отделов продаж" />
+          </Field>
           <Field label="Описание (необязательно)"><textarea rows={2} value={form.description} onChange={(e) => set({ description: e.target.value })} /></Field>
           <Field label="Дополнительные услуги (необязательно)">
             <textarea rows={2} value={form.extra_services} onChange={(e) => set({ extra_services: e.target.value })}
@@ -350,7 +379,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           </Field>
           <div className="grid2">
             <Field label="Контактное лицо"><input value={form.contact_name} onChange={(e) => set({ contact_name: e.target.value })} /></Field>
-            <Field label="Телефон"><input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+7…" /></Field>
+            <Field label="Телефон"><input value={form.phone} onChange={(e) => set({ phone: e.target.value })} placeholder="+992…" /></Field>
           </div>
           <label className="check">
             <input type="checkbox" checked={form.coffee_break} onChange={(e) => set({ coffee_break: e.target.checked })} />
@@ -535,6 +564,10 @@ function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBoo
           {b.event_type && <DetailRow label="Тип" value={b.event_type} />}
           {b.aim && <DetailRow label="Цель" value={b.aim} />}
           {b.grade && <DetailRow label="Грейд" value={b.grade} />}
+          {b.position && <DetailRow label="Должность заявителя" value={b.position} />}
+          {b.trainer && <DetailRow label="Тренер" value={b.trainer} />}
+          {b.department && <DetailRow label="Департамент" value={b.department} />}
+          {b.target_employees && <DetailRow label="Для сотрудников" value={b.target_employees} />}
           {b.extra_services && <DetailRow label="Доп. услуги" value={b.extra_services} />}
           {b.company && <DetailRow label="Компания" value={b.company} />}
           {b.contact_name && <DetailRow label="Контакт" value={b.contact_name} />}
