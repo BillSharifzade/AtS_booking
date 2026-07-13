@@ -197,22 +197,31 @@ export default function BookingsPage() {
     }
   };
 
-  const [confirmingId, setConfirmingId] = useState<number | null>(null);
-  // Approve straight from the list. Update just this row in place (optimistically)
-  // instead of reloading the whole table — a reload re-mounts every row and replays
-  // the staggered fadeUp entrance animation, which looks glitchy.
-  const confirmFromList = async (id: number) => {
+  const [actingId, setActingId] = useState<number | null>(null);
+  // Approve / reject straight from the list. Update just this row in place
+  // (optimistically, reverting on error) instead of reloading the whole table — a
+  // reload re-mounts every row and replays the staggered fadeUp entrance animation,
+  // which looks glitchy.
+  const actOnRow = async (id: number, optimistic: Status, call: () => Promise<Booking>) => {
     const prev = bookings.find((b) => b.id === id)?.status;
-    setConfirmingId(id);
-    setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: "approved" as Status } : b)));
+    setActingId(id);
+    setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: optimistic } : b)));
     try {
-      const updated = await api.approve(id);
+      const updated = await call();
       setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: updated.status } : b)));
     } catch {
       if (prev) setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: prev } : b)));
     } finally {
-      setConfirmingId(null);
+      setActingId(null);
     }
+  };
+  const confirmFromList = (id: number) => actOnRow(id, "approved", () => api.approve(id));
+  const rejectFromList = (id: number) => {
+    const reason = window.prompt("Причина отклонения?");
+    if (reason == null) return; // cancelled
+    const r = reason.trim();
+    if (!r) return; // a reason is required by the backend
+    actOnRow(id, "rejected", () => api.reject(id, r));
   };
 
   const valid =
@@ -268,7 +277,7 @@ export default function BookingsPage() {
               <th>Окончание</th>
               <th>Чел.</th>
               <th>Статус</th>
-              {admin && <th>Подтв.</th>}
+              {admin && <th>Действия</th>}
             </tr>
           </thead>
           <tbody>
@@ -297,20 +306,28 @@ export default function BookingsPage() {
                   <StatusBadge status={b.status} />
                 </td>
                 {admin && (() => {
-                  const confirmed = b.status === "approved" || b.status === "completed";
-                  const canConfirm = b.status === "new" || b.status === "processing";
+                  const canAct = b.status === "new" || b.status === "processing";
                   return (
-                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-                      {confirmed || canConfirm ? (
-                        <input
-                          type="checkbox"
-                          className="confirm-check"
-                          title={confirmed ? "Подтверждён" : "Подтвердить заявку"}
-                          checked={confirmed}
-                          disabled={!canConfirm || confirmingId === b.id}
-                          onClick={(e) => e.stopPropagation()}
-                          onChange={() => confirmFromList(b.id)}
-                        />
+                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center", whiteSpace: "nowrap" }}>
+                      {canAct ? (
+                        <span className="row-actions">
+                          <button
+                            className="icon-btn-sq approve"
+                            title="Подтвердить"
+                            disabled={actingId === b.id}
+                            onClick={(e) => { e.stopPropagation(); confirmFromList(b.id); }}
+                          >✓</button>
+                          <button
+                            className="icon-btn-sq reject"
+                            title="Отклонить"
+                            disabled={actingId === b.id}
+                            onClick={(e) => { e.stopPropagation(); rejectFromList(b.id); }}
+                          >✕</button>
+                        </span>
+                      ) : b.status === "approved" || b.status === "completed" ? (
+                        <span className="tick-done" title="Подтверждён">✓</span>
+                      ) : b.status === "rejected" ? (
+                        <span className="cross-done" title="Отклонена">✕</span>
                       ) : "—"}
                     </td>
                   );

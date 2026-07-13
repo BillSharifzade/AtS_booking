@@ -307,9 +307,21 @@ th {
 tbody tr { transition: background 0.14s var(--ease); }
 tbody tr:hover td { background: var(--accent-soft); }
 table tbody tr[onclick], .clickable-rows tbody tr { cursor: pointer; }
-.confirm-check { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
-.confirm-check:disabled { cursor: default; }
-.confirm-check:not(:disabled):hover { filter: brightness(1.05); }
+.row-actions { display: inline-flex; gap: 6px; justify-content: center; }
+.icon-btn-sq {
+  width: 28px; height: 28px; padding: 0; border-radius: 8px;
+  border: 1px solid var(--border); background: #fff; cursor: pointer;
+  font-size: 14px; line-height: 1; display: inline-flex; align-items: center; justify-content: center;
+  transition: background 0.14s var(--ease), border-color 0.14s var(--ease), transform 0.1s var(--ease);
+}
+.icon-btn-sq:active:not(:disabled) { transform: scale(0.92); }
+.icon-btn-sq:disabled { opacity: 0.45; cursor: default; }
+.icon-btn-sq.approve { color: var(--green); }
+.icon-btn-sq.approve:hover:not(:disabled) { background: var(--green-soft); border-color: var(--green); }
+.icon-btn-sq.reject { color: var(--red); }
+.icon-btn-sq.reject:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
+.tick-done { color: var(--green); font-weight: 700; }
+.cross-done { color: var(--red); font-weight: 700; }
 tr:last-child td { border-bottom: none; }
 
 /* ---------- Badges ---------- */
