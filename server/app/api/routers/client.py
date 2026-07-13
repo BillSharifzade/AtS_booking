@@ -59,11 +59,13 @@ def _booking_out(b: Booking, has_feedback: bool, room_name: str) -> ClientBookin
 
 
 async def _rooms_out(session: AsyncSession) -> list[ClientRoomOut]:
-    """Bookable rooms for the client — zones are an admin-only grouping and are not
-    exposed. Ordered smallest-sufficient capacity first (unknown-capacity rooms last)."""
+    """Bookable rooms for the client — every active room (the coffee-break flag no
+    longer hides a room from booking; it only marks rooms that can additionally serve
+    coffee). Zones are an admin-only grouping and are not exposed. Ordered
+    smallest-sufficient capacity first (unknown-capacity rooms last)."""
     rooms = (
         await session.execute(
-            select(Room).where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
+            select(Room).where(Room.is_active.is_(True))
         )
     ).scalars().all()
     rooms = sorted(rooms, key=svc._capacity_sort_key)
@@ -73,7 +75,7 @@ async def _rooms_out(session: AsyncSession) -> list[ClientRoomOut]:
         await session.execute(
             select(RoomImage.room_id, RoomImage.id)
             .join(Room, Room.id == RoomImage.room_id)
-            .where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
+            .where(Room.is_active.is_(True))
             .order_by(RoomImage.room_id, RoomImage.sort_order, RoomImage.id)
         )
     ).all()
@@ -167,7 +169,7 @@ async def create_booking(
     session: AsyncSession = Depends(get_session),
 ) -> ClientBookingOut:
     room = await session.get(Room, payload.room_id)
-    if room is None or not room.is_active or room.is_coffee_break:
+    if room is None or not room.is_active:
         raise HTTPException(404, "Помещение недоступно для бронирования.")
     # If a company was picked, trust the curated record's name over any client-sent label.
     company_name = payload.company

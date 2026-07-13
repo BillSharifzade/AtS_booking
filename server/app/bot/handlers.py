@@ -204,11 +204,12 @@ WEEKDAYS_RU = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
 
 
 async def _bookable_rooms_list(session: AsyncSession) -> list[Room]:
-    """Active, non-coffee rooms, smallest-sufficient capacity first (unknown last).
-    Customers pick a room directly — zones are never surfaced."""
+    """Every active room, smallest-sufficient capacity first (unknown last). The
+    coffee-break flag no longer hides a room from booking. Customers pick a room
+    directly — zones are never surfaced."""
     rooms = (
         await session.execute(
-            select(Room).where(Room.is_active.is_(True), Room.is_coffee_break.is_(False))
+            select(Room).where(Room.is_active.is_(True))
         )
     ).scalars().all()
     return sorted(rooms, key=svc._capacity_sort_key)
@@ -745,7 +746,7 @@ async def confirm(msg: Message, state: FSMContext) -> None:
         # The customer chose a specific room; create_booking re-validates capacity,
         # operating hours, conflicts and off-time (raising BookingError on failure).
         room = await session.get(Room, data["room_id"])
-        if room is None or not room.is_active or room.is_coffee_break:
+        if room is None or not room.is_active:
             await _offer_alternatives(msg, state, "Выбранное помещение больше недоступно.")
             return
         try:

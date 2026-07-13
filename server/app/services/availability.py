@@ -188,9 +188,10 @@ async def assign_room(
 
 
 async def _bookable_room(session: AsyncSession, room_id: int, attendees: int) -> Room | None:
-    """The room if it exists, is bookable (active, non-coffee) and holds ``attendees``."""
+    """The room if it exists, is active and holds ``attendees``. (The coffee-break flag
+    no longer excludes a room from booking — see client._rooms_out.)"""
     room = await session.get(Room, room_id)
-    if room is None or not room.is_active or room.is_coffee_break or not room_fits(room, attendees):
+    if room is None or not room.is_active or not room_fits(room, attendees):
         return None
     return room
 
