@@ -198,11 +198,18 @@ export default function BookingsPage() {
   };
 
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
+  // Approve straight from the list. Update just this row in place (optimistically)
+  // instead of reloading the whole table — a reload re-mounts every row and replays
+  // the staggered fadeUp entrance animation, which looks glitchy.
   const confirmFromList = async (id: number) => {
+    const prev = bookings.find((b) => b.id === id)?.status;
     setConfirmingId(id);
+    setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: "approved" as Status } : b)));
     try {
-      await api.approve(id);
-      load();
+      const updated = await api.approve(id);
+      setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: updated.status } : b)));
+    } catch {
+      if (prev) setBookings((bs) => bs.map((b) => (b.id === id ? { ...b, status: prev } : b)));
     } finally {
       setConfirmingId(null);
     }
@@ -289,24 +296,25 @@ export default function BookingsPage() {
                 <td>
                   <StatusBadge status={b.status} />
                 </td>
-                {admin && (
-                  <td onClick={(e) => e.stopPropagation()}>
-                    {b.status === "new" || b.status === "processing" ? (
-                      <input
-                        type="checkbox"
-                        title="Подтвердить заявку"
-                        disabled={confirmingId === b.id}
-                        checked={false}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={() => confirmFromList(b.id)}
-                      />
-                    ) : b.status === "approved" ? (
-                      <span title="Подтверждён" style={{ color: "var(--accent, #2a5bd7)" }}>✓</span>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                )}
+                {admin && (() => {
+                  const confirmed = b.status === "approved" || b.status === "completed";
+                  const canConfirm = b.status === "new" || b.status === "processing";
+                  return (
+                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
+                      {confirmed || canConfirm ? (
+                        <input
+                          type="checkbox"
+                          className="confirm-check"
+                          title={confirmed ? "Подтверждён" : "Подтвердить заявку"}
+                          checked={confirmed}
+                          disabled={!canConfirm || confirmingId === b.id}
+                          onClick={(e) => e.stopPropagation()}
+                          onChange={() => confirmFromList(b.id)}
+                        />
+                      ) : "—"}
+                    </td>
+                  );
+                })()}
               </tr>
             ))}
           </tbody>

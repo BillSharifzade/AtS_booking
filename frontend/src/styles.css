@@ -307,6 +307,9 @@ th {
 tbody tr { transition: background 0.14s var(--ease); }
 tbody tr:hover td { background: var(--accent-soft); }
 table tbody tr[onclick], .clickable-rows tbody tr { cursor: pointer; }
+.confirm-check { width: 17px; height: 17px; accent-color: var(--accent); cursor: pointer; vertical-align: middle; }
+.confirm-check:disabled { cursor: default; }
+.confirm-check:not(:disabled):hover { filter: brightness(1.05); }
 tr:last-child td { border-bottom: none; }
 
 /* ---------- Badges ---------- */
