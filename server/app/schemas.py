@@ -288,6 +288,12 @@ class CoffeeBreakOut(BaseModel):
     coffee_room: str | None
 
 
+class BookingTrainerUpdate(BaseModel):
+    # Trainer is admin-only info for the AtS group broadcast (not collected in the
+    # client mini app), so admins set it on the booking here.
+    trainer: str | None = Field(default=None, max_length=200)
+
+
 class ApproveIn(BaseModel):
     note: str | None = None
 

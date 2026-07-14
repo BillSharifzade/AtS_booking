@@ -38,6 +38,19 @@ export const EVENT_TYPES = [
 const KOINOTI_RE = /ко[ий]?ноти\s*нав|koinoti\s*nav/i;
 export const isKoinoti = (company: string): boolean => KOINOTI_RE.test(company || "");
 
+// Capacity is free text (e.g. «До 10 человек», «10-12», «много»). Mirror the backend
+// capacity_number()/room_fits(): use the LARGEST number in the label; an unparseable
+// label (no digits) is treated as unlimited and never blocks a booking.
+export function capacityNumber(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const nums = text.match(/\d+/g);
+  return nums ? Math.max(...nums.map(Number)) : null;
+}
+export function roomFits(capacity: string | null | undefined, attendees: number): boolean {
+  const cap = capacityNumber(capacity);
+  return cap === null || cap >= attendees;
+}
+
 // Participation-rules acknowledgement (#4). Files/links are placeholders until the
 // real documents are supplied — edit RULES_LINKS to point at the actual URLs.
 export const RULES_INTRO =

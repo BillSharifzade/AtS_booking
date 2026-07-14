@@ -17,6 +17,42 @@ function fmt(dt: string) {
   return new Date(dt).toLocaleString("ru-RU", { timeZone: "UTC" });
 }
 
+// Trainer is admin-only info for the AtS group broadcast — it is not collected in
+// the client mini app, so admins fill/edit it here (e.g. before approving, when the
+// approval fires the group message).
+function TrainerEditor({ booking, onSaved }: { booking: BookingWithRoom; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(booking.trainer || "");
+  const [busy, setBusy] = useState(false);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await api.setTrainer(booking.id, value.trim() || null);
+      setEditing(false);
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span>{booking.trainer || "—"}</span>
+        <button className="link-btn" onClick={() => { setValue(booking.trainer || ""); setEditing(true); }}>изменить</button>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <input value={value} onChange={(e) => setValue(e.target.value)} placeholder="ФИО тренера" autoFocus />
+      <button className="primary" disabled={busy} onClick={save}>{busy ? "…" : "Сохранить"}</button>
+      <button disabled={busy} onClick={() => setEditing(false)}>Отмена</button>
+    </div>
+  );
+}
+
 export default function BookingDetailPage() {
   const { id } = useParams();
   const nav = useNavigate();
@@ -103,7 +139,8 @@ export default function BookingDetailPage() {
             <div className="k">Цель бронирования</div><div>{b.aim || "—"}</div>
             <div className="k">Грейд</div><div>{b.grade || "—"}</div>
             <div className="k">Должность заявителя</div><div>{b.position || "—"}</div>
-            <div className="k">Тренер</div><div>{b.trainer || "—"}</div>
+            <div className="k">Тренер</div>
+            <div>{admin ? <TrainerEditor booking={b} onSaved={load} /> : (b.trainer || "—")}</div>
             {b.department && (<><div className="k">Департамент</div><div>{b.department}</div></>)}
             <div className="k">Для сотрудников</div><div>{b.target_employees || "—"}</div>
             <div className="k">Доп. услуги</div><div>{b.extra_services || "—"}</div>

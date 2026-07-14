@@ -404,6 +404,8 @@ export const api = {
   listCoffee: () => request<CoffeeBreak[]>("/bookings/coffee"),
   setCoffee: (id: number, body: { coffee_status?: string; coffee_room_id?: number | null }) =>
     request<BookingWithRoom>(`/bookings/${id}/coffee`, { method: "PATCH", body: JSON.stringify(body) }),
+  setTrainer: (id: number, trainer: string | null) =>
+    request<BookingWithRoom>(`/bookings/${id}/trainer`, { method: "PATCH", body: JSON.stringify({ trainer }) }),
   toggleChecklistItem: (bookingId: number, itemId: number, done: boolean) =>
     request<BookingChecklistItem>(`/bookings/${bookingId}/checklist/${itemId}`, {
       method: "PATCH",

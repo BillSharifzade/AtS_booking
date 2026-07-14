@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { EVENT_TYPES, GRADES, isKoinoti, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
 
 type Tab = "new" | "my";
 
-const STEPS = ["Компания", "Зал и дата", "Расстановка", "Оборудование", "Детали", "Согласие", "Готово"] as const;
+const STEPS = ["Компания", "Расстановка", "Зал и дата", "Оборудование", "Детали", "Согласие", "Готово"] as const;
 // Index of the last input step (the consent step, where the form is submitted).
 const LAST_STEP = STEPS.length - 2;
 
@@ -28,7 +28,6 @@ type Form = {
   grade: string;
   extra_services: string;
   position: string;
-  trainer: string;
   department: string;
   target_employees: string;
   contact_name: string;
@@ -47,7 +46,7 @@ const emptyForm = (name: string): Form => ({
   company_id: null, company: "", room_id: null, attendees: "10",
   slot: { date: "", start: "", end: "" }, room_struct: null, props: {},
   event_name: "", event_type: "", description: "", aim: "", grade: "", extra_services: "",
-  position: "", trainer: "", department: "", target_employees: "",
+  position: "", department: "", target_employees: "",
   contact_name: name, phone: "",
   coffee_break: false, coffee_headcount: "", coffee_type: "standard", coffee_other: "", foreign_guests: false,
   is_urgent: false,
@@ -133,6 +132,14 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   const attendeesNum = parseInt(form.attendees, 10) || 0;
   const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }));
 
+  // Warn when the chosen room can't hold the requested headcount (#1). Mirrors the
+  // backend room_fits(): an unparseable capacity («много») never triggers the warning.
+  const selectedRoom = useMemo(
+    () => boot.rooms.find((r) => r.id === form.room_id) ?? null,
+    [boot.rooms, form.room_id],
+  );
+  const roomOverCapacity = !!(selectedRoom && attendeesNum > 0 && !roomFits(selectedRoom.capacity, attendeesNum));
+
   // Mirror the backend rule (services/bookings.is_urgent): bookings starting in
   // <2 days are urgent automatically, so the checkbox is forced on and locked.
   const autoUrgent = useMemo(() => {
@@ -144,11 +151,11 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   const canNext = useMemo(() => {
     switch (step) {
       case 0: return !!(form.company_id || form.company.trim());
-      case 1: return !!(form.room_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
-      case 2: return true; // room_struct optional
+      case 1: return true; // room_struct optional
+      case 2: return !!(form.room_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
       case 3: return true; // props optional
       case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.aim.trim() && form.grade &&
-        form.position.trim() && form.trainer.trim() && form.target_employees.trim() &&
+        form.position.trim() && form.target_employees.trim() &&
         (!isKoinoti(form.company) || form.department.trim()) &&
         form.contact_name.trim() && form.phone.trim() &&
         (!form.coffee_break || (form.coffee_headcount && (form.coffee_type !== "other" || form.coffee_other.trim()))));
@@ -175,7 +182,6 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       grade: form.grade || null,
       extra_services: form.extra_services.trim() || null,
       position: form.position.trim() || null,
-      trainer: form.trainer.trim() || null,
       department: isKoinoti(form.company) ? form.department.trim() || null : null,
       target_employees: form.target_employees.trim() || null,
       privacy_accepted: form.agree.every(Boolean),
@@ -251,7 +257,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         </Section>
       )}
 
-      {step === 1 && (
+      {step === 2 && (
         <Section title="Помещение, участники и время">
           <Field label="Помещение">
             {boot.rooms.length > 0 ? (
@@ -288,7 +294,12 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           <Field label="Участников">
             <input inputMode="numeric" value={form.attendees} onChange={(e) => set({ attendees: e.target.value, slot: { date: "", start: "", end: "" } })} />
           </Field>
-          {form.room_id && attendeesNum > 0 ? (
+          {roomOverCapacity && (
+            <div className="warn-box">
+              Лимит помещения превышен{selectedRoom?.capacity ? ` (вместимость «${selectedRoom.capacity}»)` : ""}, пожалуйста выберите другое помещение или уменьшите число участников.
+            </div>
+          )}
+          {roomOverCapacity ? null : form.room_id && attendeesNum > 0 ? (
             <Calendar roomId={form.room_id} attendees={attendeesNum} value={form.slot} onChange={(slot) => set({ slot })} />
           ) : (
             <div className="hint">Выберите помещение и число участников, чтобы увидеть свободные даты.</div>
@@ -296,7 +307,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         </Section>
       )}
 
-      {step === 2 && (
+      {step === 1 && (
         <Section title="Расстановка" subtitle="Как расставить мебель относительно экрана">
           <div className="struct-list">
             {ROOM_STRUCT_ORDER.map((s) => (
@@ -359,10 +370,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
               </select>
             </Field>
           </div>
-          <div className="grid2">
-            <Field label="Должность заявителя"><input value={form.position} onChange={(e) => set({ position: e.target.value })} placeholder="напр. HR-менеджер" /></Field>
-            <Field label="Тренер мероприятия"><input value={form.trainer} onChange={(e) => set({ trainer: e.target.value })} placeholder="ФИО тренера" /></Field>
-          </div>
+          <Field label="Должность заявителя"><input value={form.position} onChange={(e) => set({ position: e.target.value })} placeholder="напр. HR-менеджер" /></Field>
           {isKoinoti(form.company) && (
             <Field label="Департамент / Отдел">
               <input value={form.department} onChange={(e) => set({ department: e.target.value })} placeholder="напр. Департамент цифровизации" />
@@ -565,7 +573,6 @@ function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBoo
           {b.aim && <DetailRow label="Цель" value={b.aim} />}
           {b.grade && <DetailRow label="Грейд" value={b.grade} />}
           {b.position && <DetailRow label="Должность заявителя" value={b.position} />}
-          {b.trainer && <DetailRow label="Тренер" value={b.trainer} />}
           {b.department && <DetailRow label="Департамент" value={b.department} />}
           {b.target_employees && <DetailRow label="Для сотрудников" value={b.target_employees} />}
           {b.extra_services && <DetailRow label="Доп. услуги" value={b.extra_services} />}

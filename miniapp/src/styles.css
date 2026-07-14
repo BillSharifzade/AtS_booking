@@ -101,6 +101,7 @@ textarea { resize: vertical; min-height: 60px; }
 .hint { color: var(--muted); font-size: 13.5px; padding: 10px 14px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .muted { color: var(--muted); }
 .error-box { background: var(--red-soft); color: var(--red); padding: 12px 14px; border-radius: var(--radius-sm); font-size: 14px; margin: 12px 0; font-weight: 500; }
+.warn-box { background: var(--amber-soft); color: var(--amber); padding: 12px 14px; border-radius: var(--radius-sm); font-size: 13.5px; margin: 4px 0 2px; font-weight: 600; line-height: 1.4; }
 
 /* ---- Steps indicator ---- */
 .steps { display: flex; align-items: flex-start; margin-bottom: 22px; }

@@ -26,6 +26,7 @@ from app.schemas import (
     BookingCreate,
     BookingOut,
     BookingPropOut,
+    BookingTrainerUpdate,
     BookingWithRoom,
     CoffeeBreakOut,
     CoffeeUpdate,
@@ -295,6 +296,27 @@ async def set_coffee(
     await svc.audit(
         session, admin_id, "booking.coffee", "booking", booking.id,
         f"«{booking.event_name}»: статус={booking.coffee_status}, помещение={booking.coffee_room_id or '—'}",
+    )
+    await session.commit()
+    return await svc.get_booking_with_details(session, booking_id)
+
+
+@router.patch("/{booking_id}/trainer", response_model=BookingWithRoom)
+async def set_trainer(
+    booking_id: int,
+    payload: BookingTrainerUpdate,
+    admin_id: int = Depends(current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> Booking:
+    # Trainer is admin-only info surfaced in the AtS group broadcast — not collected
+    # in the client mini app — so admins set/edit it on the booking here.
+    booking = await svc.get_booking_with_details(session, booking_id)
+    if booking is None:
+        raise HTTPException(404, "not found")
+    booking.trainer = (payload.trainer or "").strip() or None
+    await svc.audit(
+        session, admin_id, "booking.trainer", "booking", booking.id,
+        f"«{booking.event_name}»: тренер={booking.trainer or '—'}",
     )
     await session.commit()
     return await svc.get_booking_with_details(session, booking_id)
