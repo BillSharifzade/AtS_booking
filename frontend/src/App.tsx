@@ -17,6 +17,7 @@ import ChecklistPage from "./pages/ChecklistPage";
 import OfftimesPage from "./pages/OfftimesPage";
 import KnowledgePage from "./pages/KnowledgePage";
 import ReviewsPage from "./pages/ReviewsPage";
+import LandingPage from "./pages/LandingPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const loc = useLocation();
@@ -52,6 +53,7 @@ export default function App() {
         <Route path="offtimes" element={<OfftimesPage />} />
         <Route path="reviews" element={<ReviewsPage />} />
         <Route path="knowledge" element={<KnowledgePage />} />
+        <Route path="landing" element={<RequireAdmin><LandingPage /></RequireAdmin>} />
         <Route path="checklist" element={<RequireAdmin><ChecklistPage /></RequireAdmin>} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="bot-texts" element={<BotTextsPage />} />

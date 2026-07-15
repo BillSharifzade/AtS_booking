@@ -98,11 +98,43 @@ export type NewBooking = {
   props: { prop_id: number; amount: number }[];
 };
 
+export type LandingEcosystemItem = { number: string; title: string; subtitle: string };
+export type LandingStat = { value: string; label: string };
+export type LandingSocials = { instagram: string; facebook: string; linkedin: string; telegram: string };
+export type LandingContent = {
+  hero_title: string;
+  hero_subtitle: string;
+  cta_label: string;
+  ecosystem: LandingEcosystemItem[];
+  features: string[];
+  stats: LandingStat[];
+  phone: string;
+  email: string;
+  socials: LandingSocials;
+};
+
+export type CalendarEvent = {
+  id: number;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  time_text: string | null;
+  title: string;
+  room: string | null;
+  company: string | null;
+  trainer: string | null;
+  audience: string | null;
+  coffee: string | null;
+  participants: number | null;
+};
+
 export const companyLogoUrl = (id: number) => `${BASE}/companies/${id}/logo`;
 export const roomImageUrl = (roomId: number, imageId: number) => `${BASE}/rooms/${roomId}/images/${imageId}/raw`;
 
 export const api = {
   bootstrap: () => request<Bootstrap>("/client/bootstrap"),
+  landing: () => request<LandingContent>("/site/landing"),
+  events: () => request<CalendarEvent[]>("/site/events"),
   roomDays: (id: number, from: string, to: string, attendees: number) =>
     request<ZoneDay[]>(`/client/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
   roomSlots: (id: number, on: string, attendees: number) =>

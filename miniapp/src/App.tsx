@@ -6,6 +6,7 @@ import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUC
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
+import Landing from "./components/Landing";
 
 type Tab = "new" | "my";
 
@@ -96,11 +97,15 @@ export default function App() {
   const [boot, setBoot] = useState<Bootstrap | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("new");
+  // Browser visitors land on a marketing page first; Telegram opens straight into
+  // the booking flow (isTelegram ⇒ already "entered").
+  const [entered, setEntered] = useState(isTelegram);
 
   useEffect(() => {
     api.bootstrap().then(setBoot).catch((e) => setError((e as Error).message));
   }, []);
 
+  if (!entered) return <Landing onBook={() => setEntered(true)} />;
   if (error) return <div className="screen"><div className="empty error-box">{error}</div></div>;
   if (!boot) return <div className="screen"><div className="loader">Загрузка…</div></div>;
 
@@ -108,7 +113,13 @@ export default function App() {
     <div className={`app${isTelegram ? "" : " mode-desktop"}`}>
       <header className="topbar">
         <div className="brand-row">
-          <div className="brand"><img className="brand-logo" src={logoUrl} alt="AtS" /><span>Бронирование</span></div>
+          <button
+            className="brand as-link"
+            onClick={() => { if (!isTelegram) { setEntered(false); haptic(); } }}
+            title={isTelegram ? undefined : "На главную"}
+          >
+            <img className="brand-logo" src={logoUrl} alt="AtS" /><span>Бронирование</span>
+          </button>
           {!isTelegram && <span className="guest-pill">Гость</span>}
         </div>
         <div className="tabs" data-active={tab}>

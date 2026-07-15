@@ -21,6 +21,7 @@ from app.api.routers import (
     props,
     reports,
     rooms,
+    site,
     users,
     zones,
 )
@@ -84,3 +85,4 @@ app.include_router(checklist.router)
 app.include_router(offtimes.router)
 app.include_router(articles.router)
 app.include_router(client.router)
+app.include_router(site.router)

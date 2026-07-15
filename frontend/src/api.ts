@@ -333,6 +333,38 @@ export type Review = {
   created_at: string;
 };
 
+// ---- Public website (browser client) landing content ----
+export type LandingEcosystemItem = { number: string; title: string; subtitle: string };
+export type LandingStat = { value: string; label: string };
+export type LandingSocials = { instagram: string; facebook: string; linkedin: string; telegram: string };
+export type LandingContent = {
+  hero_title: string;
+  hero_subtitle: string;
+  cta_label: string;
+  ecosystem: LandingEcosystemItem[];
+  features: string[];
+  stats: LandingStat[];
+  phone: string;
+  email: string;
+  socials: LandingSocials;
+};
+
+export type CalendarEvent = {
+  id: number;
+  event_date: string;
+  start_time: string | null;
+  end_time: string | null;
+  time_text: string | null;
+  title: string;
+  room: string | null;
+  company: string | null;
+  trainer: string | null;
+  audience: string | null;
+  coffee: string | null;
+  participants: number | null;
+};
+export type CalendarImportResult = { imported: number; months: string[]; events: CalendarEvent[] };
+
 export function companyLogoUrl(id: number): string {
   return `${BASE}/companies/${id}/logo`;
 }
@@ -470,6 +502,17 @@ export const api = {
   updateArticle: (id: number, data: Partial<{ title: string; category: string; body: string }>) =>
     request<Article>(`/articles/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteArticle: (id: number) => request<void>(`/articles/${id}`, { method: "DELETE" }),
+
+  // ---- Landing page content (browser client) ----
+  getLanding: () => request<LandingContent>("/site/landing"),
+  updateLanding: (data: LandingContent) =>
+    request<LandingContent>("/site/landing", { method: "PUT", body: JSON.stringify(data) }),
+
+  // ---- Events calendar (landing page) ----
+  listEvents: () => request<CalendarEvent[]>("/site/events"),
+  importEvents: (filename: string, data: string) =>
+    request<CalendarImportResult>("/site/events/import", { method: "POST", body: JSON.stringify({ filename, data }) }),
+  clearEvents: () => request<void>("/site/events", { method: "DELETE" }),
 
   audit: () => request<Audit[]>("/audit"),
 

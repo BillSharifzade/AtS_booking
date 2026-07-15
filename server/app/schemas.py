@@ -705,3 +705,69 @@ class ReviewOut(BaseModel):
     props_rating: int | None
     comment: str | None
     created_at: datetime
+
+
+# ---- Public website content (browser landing page) ----
+
+class LandingEcosystemItem(BaseModel):
+    """One card in the «Экосистема AtS» block (e.g. Тренинг центр / ДИРЦ / Book Space)."""
+    number: str = Field(default="", max_length=8)
+    title: str = Field(default="", max_length=120)
+    subtitle: str = Field(default="", max_length=300)
+
+
+class LandingStat(BaseModel):
+    """A headline number + its caption (e.g. «1000+» / «проведённых занятий»)."""
+    value: str = Field(default="", max_length=40)
+    label: str = Field(default="", max_length=120)
+
+
+class LandingSocials(BaseModel):
+    instagram: str = Field(default="", max_length=300)
+    facebook: str = Field(default="", max_length=300)
+    linkedin: str = Field(default="", max_length=300)
+    telegram: str = Field(default="", max_length=300)
+
+
+class LandingContent(BaseModel):
+    """Editable content for the public booking landing page. Admins manage this in
+    the panel; the browser client renders it before the booking wizard."""
+    hero_title: str = Field(default="", max_length=120)
+    hero_subtitle: str = Field(default="", max_length=400)
+    cta_label: str = Field(default="", max_length=60)
+    ecosystem: list[LandingEcosystemItem] = []
+    features: list[str] = []
+    stats: list[LandingStat] = []
+    phone: str = Field(default="", max_length=60)
+    email: str = Field(default="", max_length=120)
+    socials: LandingSocials = LandingSocials()
+
+
+# ---- Public events calendar (landing page) ----
+
+class CalendarEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    event_date: date
+    start_time: time | None = None
+    end_time: time | None = None
+    time_text: str | None = None
+    title: str
+    room: str | None = None
+    company: str | None = None
+    trainer: str | None = None
+    audience: str | None = None
+    coffee: str | None = None
+    participants: int | None = None
+
+
+class CalendarImport(BaseModel):
+    """xlsx payload as base64 (multipart isn't wired; mirrors the logo-upload pattern)."""
+    filename: str | None = None
+    data: str  # base64-encoded .xlsx
+
+
+class CalendarImportResult(BaseModel):
+    imported: int
+    months: list[str]
+    events: list[CalendarEventOut]

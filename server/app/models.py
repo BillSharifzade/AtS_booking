@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import enum
+from datetime import date as date_
 from datetime import datetime, time
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -439,6 +441,47 @@ class RoomOfftime(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     room: Mapped[Room] = relationship(lazy="selectin")
+
+
+class SiteContent(Base):
+    """Admin-editable content blocks for the public client website (browser mode).
+    A tiny key/value store — the value is a JSON document. Currently used for the
+    booking landing page (key = "landing"). Kept generic so future editable blocks
+    (about page, promo banners, …) reuse the same table without a migration."""
+
+    __tablename__ = "site_content"
+
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, nullable=False)  # JSON document
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CalendarEvent(Base):
+    """A public "calendar of events" entry shown on the website landing page.
+    Populated by admins uploading the monthly «Календарь мероприятий» xlsx
+    (services.calendar_import). One row per event (a day can have several)."""
+
+    __tablename__ = "calendar_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    event_date: Mapped[date_] = mapped_column(Date, nullable=False, index=True)
+    # Parsed best-effort from the free-text time cell for ordering/display.
+    start_time: Mapped[time | None] = mapped_column(Time)
+    end_time: Mapped[time | None] = mapped_column(Time)
+    # Original time cell, e.g. "08:30-12:30" — kept verbatim for display.
+    time_text: Mapped[str | None] = mapped_column(String(60))
+    title: Mapped[str] = mapped_column(String(300), nullable=False)  # Мероприятие
+    room: Mapped[str | None] = mapped_column(String(160))            # Зал
+    company: Mapped[str | None] = mapped_column(String(200))         # Компании/Проект
+    trainer: Mapped[str | None] = mapped_column(String(160))         # Тренер/Ведущий
+    audience: Mapped[str | None] = mapped_column(String(200))        # Аудитория
+    coffee: Mapped[str | None] = mapped_column(String(120))          # Кофе-брейк
+    participants: Mapped[int | None] = mapped_column(Integer)        # Кол-во участников
+    # Order within a day (import order), so multi-event days keep their sheet order.
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class Article(Base):
