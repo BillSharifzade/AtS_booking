@@ -60,7 +60,16 @@ textarea { resize: vertical; min-height: 60px; }
   padding: max(16px, env(safe-area-inset-top)) 16px 16px;
   box-shadow: 0 8px 30px rgba(11, 13, 18, 0.18);
 }
-.brand-row { display: flex; align-items: center; justify-content: space-between; }
+.brand-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.home-btn {
+  display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+  padding: 7px 13px; border-radius: 999px; font-size: 12.5px; font-weight: 650; color: #fff;
+  background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: background 0.16s var(--ease), transform 0.16s var(--spring);
+}
+.home-btn:hover { background: rgba(255, 255, 255, 0.2); transform: translateY(-1px); }
+.home-btn svg { display: block; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; font-size: 16px; letter-spacing: 0.2px; }
 /* The logo art is white, and the header is dark — keep the backing transparent
    so the mark stays visible (a white box made it disappear). */
@@ -597,15 +606,6 @@ button.ghost:active { background: var(--bg); }
 }
 .lp-eco-title { margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; }
 .lp-eco-sub { margin: 0; font-size: 14px; line-height: 1.5; color: var(--muted); }
-
-/* Final CTA */
-.lp-final {
-  margin-top: 44px; text-align: center; padding: 40px 24px;
-  background: var(--accent-soft); border: 1px solid var(--border); border-radius: var(--radius-lg);
-}
-.lp-final-title { margin: 0; font-size: clamp(22px, 5vw, 28px); font-weight: 800; letter-spacing: -0.02em; }
-.lp-final-sub { margin: 10px 0 0; color: var(--ink-2); font-size: 15px; }
-.lp-final .lp-cta { color: #fff; }
 
 /* Footer */
 .lp-foot {

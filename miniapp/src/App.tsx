@@ -116,11 +116,21 @@ export default function App() {
           <button
             className="brand as-link"
             onClick={() => { if (!isTelegram) { setEntered(false); haptic(); } }}
-            title={isTelegram ? undefined : "На главную"}
+            title={isTelegram ? undefined : "На лендинг"}
           >
             <img className="brand-logo" src={logoUrl} alt="AtS" /><span>Бронирование</span>
           </button>
-          {!isTelegram && <span className="guest-pill">Гость</span>}
+          <div className="topbar-right">
+            {!isTelegram && (
+              <button className="home-btn" onClick={() => { setEntered(false); haptic(); }}>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="M3 12l9-9 9 9" /><path d="M5 10v10h14V10" />
+                </svg>
+                <span>На лендинг</span>
+              </button>
+            )}
+            {!isTelegram && <span className="guest-pill">Гость</span>}
+          </div>
         </div>
         <div className="tabs" data-active={tab}>
           <span className="tab-pill" aria-hidden />

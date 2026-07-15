@@ -187,12 +187,6 @@ export default function Landing({ onBook }: { onBook: () => void }) {
 
         <EventsCalendar />
 
-        <section className="lp-final">
-          <h2 className="lp-final-title">Готовы начать?</h2>
-          <p className="lp-final-sub">Выберите зал, дату и оформите заявку за пару минут.</p>
-          <button className="lp-cta" onClick={book}>{cta}<span className="lp-cta-arrow" aria-hidden>→</span></button>
-        </section>
-
         <footer className="lp-foot">
           <div className="lp-contacts">
             {data.phone && <a href={`tel:${data.phone.replace(/[^\d+]/g, "")}`}>{data.phone}</a>}
