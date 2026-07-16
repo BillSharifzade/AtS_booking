@@ -14,7 +14,7 @@ from app.services.bookings import audit
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
 MAX_IMAGES_PER_ROOM = 3
-MAX_IMAGE_BYTES = 5 * 1024 * 1024
+MAX_IMAGE_BYTES = 15 * 1024 * 1024
 
 
 def _looks_like_image(raw: bytes) -> bool:
@@ -161,7 +161,7 @@ async def add_room_images(
         except (binascii.Error, ValueError):
             raise HTTPException(400, "Повреждённые данные изображения.")
         if len(raw) > MAX_IMAGE_BYTES:
-            raise HTTPException(400, "Изображение больше 5 МБ.")
+            raise HTTPException(400, "Изображение больше 15 МБ.")
         if not _looks_like_image(raw):
             raise HTTPException(400, "Файл не является поддерживаемым изображением.")
         row = RoomImage(room_id=room_id, content_type=img.content_type, data=raw, sort_order=next_order + i)

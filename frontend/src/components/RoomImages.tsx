@@ -135,7 +135,7 @@ export default function RoomImages(props: Props) {
         style={{ display: "none" }}
         onChange={onFiles}
       />
-      <span className="field-hint">Показываются заказчику в боте при выборе помещения. До 5 МБ каждое.</span>
+      <span className="field-hint">Показываются заказчику в боте при выборе помещения. До 15 МБ каждое.</span>
       {error && <div className="error">{error}</div>}
     </div>
   );

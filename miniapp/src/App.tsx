@@ -10,7 +10,7 @@ import Landing from "./components/Landing";
 
 type Tab = "new" | "my";
 
-const STEPS = ["Компания", "Расстановка", "Зал и дата", "Оборудование", "Детали", "Согласие", "Готово"] as const;
+const STEPS = ["Компания", "Зал и расстановка", "Дата", "Оборудование", "Детали", "Согласие", "Готово"] as const;
 // Index of the last input step (the consent step, where the form is submitted).
 const LAST_STEP = STEPS.length - 2;
 
@@ -172,8 +172,8 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   const canNext = useMemo(() => {
     switch (step) {
       case 0: return !!(form.company_id || form.company.trim());
-      case 1: return true; // room_struct optional
-      case 2: return !!(form.room_id && attendeesNum > 0 && form.slot.date && form.slot.start && form.slot.end);
+      case 1: return !!(form.room_id && attendeesNum > 0 && !roomOverCapacity); // room_struct optional
+      case 2: return !!(form.slot.date && form.slot.start && form.slot.end);
       case 3: return true; // props optional
       case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.aim.trim() && form.grade &&
         form.position.trim() && form.target_employees.trim() &&
@@ -183,7 +183,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       case 5: return form.agree.every(Boolean); // must acknowledge every document
       default: return true;
     }
-  }, [step, form, attendeesNum]);
+  }, [step, form, attendeesNum, roomOverCapacity]);
 
   const submit = async () => {
     setBusy(true); setErr(null);
@@ -278,8 +278,8 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         </Section>
       )}
 
-      {step === 2 && (
-        <Section title="Помещение, участники и время">
+      {step === 1 && (
+        <Section title="Зал и расстановка">
           <Field label="Помещение">
             {boot.rooms.length > 0 ? (
               <div className="room-grid">
@@ -320,25 +320,28 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
               Лимит помещения превышен{selectedRoom?.capacity ? ` (вместимость «${selectedRoom.capacity}»)` : ""}, пожалуйста выберите другое помещение или уменьшите число участников.
             </div>
           )}
-          {roomOverCapacity ? null : form.room_id && attendeesNum > 0 ? (
-            <Calendar roomId={form.room_id} attendees={attendeesNum} value={form.slot} onChange={(slot) => set({ slot })} />
-          ) : (
-            <div className="hint">Выберите помещение и число участников, чтобы увидеть свободные даты.</div>
-          )}
+          <Field label="Расстановка">
+            <p className="field-note">Как расставить мебель относительно экрана. Необязательно.</p>
+            <div className="struct-list">
+              {ROOM_STRUCT_ORDER.map((s) => (
+                <button key={s} className={`struct ${form.room_struct === s ? "on" : ""}`} onClick={() => { set({ room_struct: s }); haptic(); }}>
+                  <RoomStructDiagram struct={s} />
+                  <span className="struct-name">{ROOM_STRUCT_LABELS[s]}</span>
+                  <span className="struct-hint">{ROOM_STRUCT_HINTS[s]}</span>
+                </button>
+              ))}
+            </div>
+          </Field>
         </Section>
       )}
 
-      {step === 1 && (
-        <Section title="Расстановка" subtitle="Как расставить мебель относительно экрана">
-          <div className="struct-list">
-            {ROOM_STRUCT_ORDER.map((s) => (
-              <button key={s} className={`struct ${form.room_struct === s ? "on" : ""}`} onClick={() => { set({ room_struct: s }); haptic(); }}>
-                <RoomStructDiagram struct={s} />
-                <span className="struct-name">{ROOM_STRUCT_LABELS[s]}</span>
-                <span className="struct-hint">{ROOM_STRUCT_HINTS[s]}</span>
-              </button>
-            ))}
-          </div>
+      {step === 2 && (
+        <Section title="Дата и время" subtitle="Выберите свободную дату и время">
+          {form.room_id && attendeesNum > 0 ? (
+            <Calendar roomId={form.room_id} attendees={attendeesNum} value={form.slot} onChange={(slot) => set({ slot })} />
+          ) : (
+            <div className="hint">Сначала выберите помещение и число участников на предыдущем шаге.</div>
+          )}
         </Section>
       )}
 
