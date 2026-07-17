@@ -17,7 +17,7 @@ from aiogram.types import (
     CallbackQuery,
     WebAppInfo,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -26,10 +26,10 @@ from aiogram.types import BufferedInputFile, InputMediaPhoto
 from app.bot import texts as t
 from app.config import local_now, settings
 from app.db import SessionLocal
-from app.models import Booking, BookingProp, ChatMessage, Feedback, Room, RoomImage
+from app.models import Booking, BookingProp, ChatMessage, Company, Feedback, Prop, Room, RoomImage
 from app.services import availability as avail
 from app.services import bookings as svc
-from app.services.bookings import GRADES, is_koinoti
+from app.services.bookings import GRADES, ROOM_STRUCTS, is_koinoti
 from app.schemas import EVENT_TYPES, GRADES as GRADE_ORDER
 from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
 from app.services.ratelimit import allow
@@ -66,10 +66,12 @@ class Booking_FSM(StatesGroup):
     description = State()
     aim = State()
     grade = State()
-    trainer = State()
     target_employees = State()
     department = State()
     extra_services = State()
+    room_struct = State()
+    props_pick = State()
+    props_amount = State()
     coffee = State()
     coffee_count = State()
     coffee_type = State()
@@ -412,8 +414,7 @@ async def pick_end(cq: CallbackQuery, state: FSMContext) -> None:
     if data.get("mode") == "edit":
         await _show_confirm(cq.message, state)
     else:
-        await state.set_state(Booking_FSM.company)
-        await cq.message.answer(t.ENTER_COMPANY, reply_markup=ReplyKeyboardRemove())
+        await _ask_company(cq.message, state)
 
 
 @router.message(Booking_FSM.pick_end)
@@ -466,9 +467,57 @@ async def _send_room_photos(chat_id: int, room_id: int) -> None:
             await session.commit()
 
 
+async def _active_companies(session: AsyncSession) -> list[Company]:
+    return list(
+        (
+            await session.execute(
+                select(Company).where(Company.is_active.is_(True)).order_by(Company.name)
+            )
+        ).scalars().all()
+    )
+
+
+def _companies_kb(companies: list[Company]) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton(text=c.name, callback_data=f"comp:{c.id}")] for c in companies]
+    rows.append([InlineKeyboardButton(text="✏️ Другая компания", callback_data="comp:other")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ask_company(msg: Message, state: FSMContext) -> None:
+    """Company step — mirrors the mini app / admin panel: pick from the curated,
+    backend-provided list (or type a custom name). Falls back to free text when the
+    directory is empty."""
+    async with SessionLocal() as session:
+        companies = await _active_companies(session)
+    await state.set_state(Booking_FSM.company)
+    if companies:
+        await msg.answer(t.PICK_COMPANY, reply_markup=_companies_kb(companies))
+    else:
+        await msg.answer(t.ENTER_COMPANY, reply_markup=ReplyKeyboardRemove())
+
+
+@router.callback_query(Booking_FSM.company, F.data.startswith("comp:"))
+async def pick_company(cq: CallbackQuery, state: FSMContext) -> None:
+    val = cq.data.split(":", 1)[1]
+    await cq.answer()
+    if val == "other":
+        await cq.message.answer(t.ENTER_COMPANY, reply_markup=ReplyKeyboardRemove())
+        return  # stay in the company state; the user types a name → get_company
+    async with SessionLocal() as session:
+        company = await session.get(Company, int(val))
+    if company is None or not company.is_active:
+        await cq.message.answer("Эта компания недоступна. Выберите другую или введите название.")
+        return
+    # Trust the curated record's name and keep the link (company_id), like the mini app.
+    await state.update_data(company_id=company.id, company=company.name)
+    await state.set_state(Booking_FSM.name)
+    await cq.message.answer(t.ENTER_NAME)
+
+
 @router.message(Booking_FSM.company)
 async def get_company(msg: Message, state: FSMContext) -> None:
-    await state.update_data(company=msg.text.strip())
+    # Typed a custom company name (no curated link).
+    await state.update_data(company=msg.text.strip(), company_id=None)
     await state.set_state(Booking_FSM.name)
     await msg.answer(t.ENTER_NAME)
 
@@ -535,16 +584,10 @@ async def get_grade(msg: Message, state: FSMContext) -> None:
         await msg.answer(t.INVALID_GRADE, reply_markup=_grade_kb())
         return
     await state.update_data(grade=grade)
-    await state.set_state(Booking_FSM.trainer)
-    await msg.answer(t.ENTER_TRAINER, reply_markup=ReplyKeyboardRemove())
-
-
-@router.message(Booking_FSM.trainer)
-async def get_trainer(msg: Message, state: FSMContext) -> None:
-    trainer = msg.text.strip()
-    await state.update_data(trainer=None if trainer == "-" else trainer)
+    # Trainer is admin-only (set later in the panel) — not collected here, matching
+    # the mini app / admin creation flow.
     await state.set_state(Booking_FSM.target_employees)
-    await msg.answer(t.ENTER_TARGET_EMPLOYEES)
+    await msg.answer(t.ENTER_TARGET_EMPLOYEES, reply_markup=ReplyKeyboardRemove())
 
 
 @router.message(Booking_FSM.target_employees)
@@ -575,6 +618,132 @@ async def get_department(msg: Message, state: FSMContext) -> None:
 async def get_extra_services(msg: Message, state: FSMContext) -> None:
     extra = msg.text.strip()
     await state.update_data(extra_services=None if extra == "-" else extra)
+    await _ask_room_struct(msg, state)
+
+
+# ---------- Seating arrangement ("Расстановка") — same field as mini app / admin ----------
+def _room_struct_kb() -> InlineKeyboardMarkup:
+    rows = [
+        [InlineKeyboardButton(text=ROOM_STRUCT_LABELS[k], callback_data=f"struct:{k}")]
+        for k in ("theatre", "class", "banquet", "u_shaped")
+    ]
+    rows.append([InlineKeyboardButton(text="Пропустить", callback_data="struct:skip")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ask_room_struct(msg: Message, state: FSMContext) -> None:
+    await state.set_state(Booking_FSM.room_struct)
+    await msg.answer(t.PICK_ROOM_STRUCT, reply_markup=_room_struct_kb())
+
+
+@router.callback_query(Booking_FSM.room_struct, F.data.startswith("struct:"))
+async def pick_room_struct(cq: CallbackQuery, state: FSMContext) -> None:
+    val = cq.data.split(":", 1)[1]
+    await cq.answer()
+    await state.update_data(room_struct=None if val == "skip" or val not in ROOM_STRUCTS else val)
+    await _ask_props(cq.message, state)
+
+
+# ---------- Equipment ("Оборудование") — same field as mini app / admin ----------
+async def _active_props(session: AsyncSession) -> list[tuple[Prop, int]]:
+    """Active equipment with real-time availability (stock minus what active bookings
+    already hold) — matches what ``validate_props`` enforces at creation."""
+    props = (
+        await session.execute(
+            select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name)
+        )
+    ).scalars().all()
+    committed = dict(
+        (
+            await session.execute(
+                select(BookingProp.prop_id, func.coalesce(func.sum(BookingProp.amount), 0))
+                .join(Booking, Booking.id == BookingProp.booking_id)
+                .where(Booking.status.in_(svc.ACTIVE_STATUSES))
+                .group_by(BookingProp.prop_id)
+            )
+        ).all()
+    )
+    return [(p, max(p.amount - committed.get(p.id, 0), 0)) for p in props]
+
+
+def _props_kb(items: list[tuple[Prop, int]], selected: dict) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    for p, avail in items:
+        unit = p.unit or "шт."
+        sel = selected.get(str(p.id), 0)
+        mark = f" · выбрано {sel}" if sel else ""
+        rows.append(
+            [InlineKeyboardButton(text=f"{p.name} · дост. {avail} {unit}{mark}", callback_data=f"prop:{p.id}")]
+        )
+    rows.append([InlineKeyboardButton(text="✅ Готово", callback_data="prop:done")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def _ask_props(msg: Message, state: FSMContext) -> None:
+    async with SessionLocal() as session:
+        items = await _active_props(session)
+    if not items:
+        # No equipment configured — skip straight to the coffee-break question.
+        await _ask_coffee(msg, state)
+        return
+    data = await state.get_data()
+    selected = data.get("props") or {}
+    await state.update_data(props=selected)
+    await state.set_state(Booking_FSM.props_pick)
+    await msg.answer(t.PICK_PROPS, reply_markup=_props_kb(items, selected))
+
+
+@router.callback_query(Booking_FSM.props_pick, F.data.startswith("prop:"))
+async def props_choose(cq: CallbackQuery, state: FSMContext) -> None:
+    val = cq.data.split(":", 1)[1]
+    await cq.answer()
+    if val == "done":
+        await _ask_coffee(cq.message, state)
+        return
+    pid = int(val)
+    async with SessionLocal() as session:
+        items = await _active_props(session)
+    match = next(((p, a) for p, a in items if p.id == pid), None)
+    if match is None:
+        await cq.message.answer("Это оборудование недоступно.")
+        return
+    p, avail = match
+    unit = p.unit or "шт."
+    await state.update_data(cur_prop=pid, cur_prop_avail=avail, cur_prop_unit=unit)
+    await state.set_state(Booking_FSM.props_amount)
+    await cq.message.answer(
+        t.ENTER_PROP_AMOUNT.format(name=p.name, avail=avail, unit=unit),
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
+@router.message(Booking_FSM.props_amount)
+async def props_set_amount(msg: Message, state: FSMContext) -> None:
+    try:
+        n = int(msg.text.strip())
+        if n < 0:
+            raise ValueError
+    except ValueError:
+        await msg.answer(t.INVALID_NUMBER)
+        return
+    data = await state.get_data()
+    pid = data.get("cur_prop")
+    avail = int(data.get("cur_prop_avail", 0))
+    unit = data.get("cur_prop_unit", "шт.")
+    if n > avail:
+        await msg.answer(f"Доступно только {avail} {unit}. Введите число не больше {avail}.")
+        return
+    selected = dict(data.get("props") or {})
+    if n == 0:
+        selected.pop(str(pid), None)
+    else:
+        selected[str(pid)] = n
+    await state.update_data(props=selected)
+    # Re-render the equipment list with the updated selection.
+    await _ask_props(msg, state)
+
+
+async def _ask_coffee(msg: Message, state: FSMContext) -> None:
     await state.set_state(Booking_FSM.coffee)
     await msg.answer(t.COFFEE_QUESTION, reply_markup=_yesno_kb())
 
@@ -696,10 +865,27 @@ def _coffee_summary(data: dict) -> str:
     return line
 
 
+async def _props_summary(session: AsyncSession, selected: dict) -> str:
+    if not selected:
+        return "Оборудование: —"
+    ids = [int(k) for k in selected]
+    props = (await session.execute(select(Prop).where(Prop.id.in_(ids)))).scalars().all()
+    by_id = {p.id: p for p in props}
+    parts = []
+    for k, amt in selected.items():
+        p = by_id.get(int(k))
+        if p is not None:
+            parts.append(f"{esc(p.name)}×{amt}")
+    return "Оборудование: " + (", ".join(parts) if parts else "—")
+
+
 async def _show_confirm(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
+    struct = data.get("room_struct")
+    struct_label = ROOM_STRUCT_LABELS.get(struct, struct) if struct else "—"
     async with SessionLocal() as session:
         room = await session.get(Room, data["room_id"])
+        props_line = await _props_summary(session, data.get("props") or {})
     summary = (
         f"Помещение: {esc(room.name)} ({esc(room.capacity)})\n"
         f"Дата: {data['bdate']}\n"
@@ -710,10 +896,11 @@ async def _show_confirm(msg: Message, state: FSMContext) -> None:
         f"Цель: {esc(data.get('aim')) or '—'}\n"
         f"Грейд: {esc(data.get('grade')) or '—'}\n"
         f"Должность заявителя: {esc(data.get('position')) or '—'}\n"
-        f"Тренер: {esc(data.get('trainer')) or '—'}\n"
         + (f"Департамент: {esc(data['department'])}\n" if data.get("department") else "")
         + f"Для сотрудников: {esc(data.get('target_employees')) or '—'}\n"
         f"Доп. услуги: {esc(data.get('extra_services')) or '—'}\n"
+        f"Расстановка: {esc(struct_label)}\n"
+        f"{props_line}\n"
         f"Участников: {data['attendees']}\n"
         + _coffee_summary(data)
         + f"\nСрочная: {'да' if data.get('urgent') else 'нет'}"
@@ -758,6 +945,7 @@ async def confirm(msg: Message, state: FSMContext) -> None:
                 customer_telegram_id=msg.from_user.id,
                 customer_username=msg.from_user.username,
                 company=data["company"],
+                company_id=data.get("company_id"),
                 contact_name=data["contact_name"],
                 phone=data["phone"],
                 event_type=data["event_type"],
@@ -767,16 +955,17 @@ async def confirm(msg: Message, state: FSMContext) -> None:
                 grade=data.get("grade"),
                 extra_services=data.get("extra_services"),
                 position=data.get("position"),
-                trainer=data.get("trainer"),
                 department=data.get("department"),
                 target_employees=data.get("target_employees"),
                 attendees=data["attendees"],
+                room_struct=data.get("room_struct"),
                 coffee_break=data["coffee"],
                 coffee_headcount=data.get("coffee_count"),
                 coffee_type=data.get("coffee_type"),
                 coffee_other=data.get("coffee_other"),
                 foreign_guests=data.get("foreign_guests", False),
                 urgent=data.get("urgent", False),
+                props=[(int(k), v) for k, v in (data.get("props") or {}).items()],
             )
             await upsert_user(
                 session,

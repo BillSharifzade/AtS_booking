@@ -135,8 +135,8 @@ export default function BookingsPage() {
       api.listCompanies(true),
       api.listProps({ activeOnly: true }),
     ]);
-    // Only active, bookable rooms — coffee-break rooms are logistics-only.
-    const bookable = rs.filter((r) => r.is_active && !r.is_coffee_break);
+    // Every active room — including coffee-break rooms, which admins may book directly.
+    const bookable = rs.filter((r) => r.is_active);
     setRooms(bookable);
     setCompanies(cs);
     setPropsList(ps);
@@ -353,7 +353,9 @@ export default function BookingsPage() {
                       <label>Помещение</label>
                       <select value={form.room_id} onChange={(e) => setForm({ ...form, room_id: e.target.value, date: "", start: "", end: "" })}>
                         {rooms.map((r) => (
-                          <option key={r.id} value={r.id}>{r.name} · {r.zone_name} · до {r.capacity}</option>
+                          <option key={r.id} value={r.id}>
+                            {r.name} · {r.zone_name} · до {r.capacity}{r.is_coffee_break ? " · кофе-брейк" : ""}
+                          </option>
                         ))}
                       </select>
                     </div>
