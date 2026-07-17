@@ -432,4 +432,5 @@ async def archive(
         await session.rollback()
         raise HTTPException(409, str(exc))
     await session.refresh(booking, attribute_names=["room"])
+    await notify_status_change(booking, booking.room, BookingStatus.archived)
     return booking

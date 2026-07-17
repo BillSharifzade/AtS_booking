@@ -403,6 +403,10 @@ export const api = {
   zoneImages: (id: number) => request<ZoneImage[]>(`/zones/${id}/images`),
 
   listRooms: () => request<Room[]>("/rooms"),
+  roomDays: (id: number, from: string, to: string, attendees: number) =>
+    request<ZoneDay[]>(`/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
+  roomSlots: (id: number, on: string, attendees: number) =>
+    request<ZoneSlot[]>(`/rooms/${id}/slots?on=${on}&attendees=${attendees}`),
   createRoom: (data: Partial<Room>) =>
     request<Room>("/rooms", { method: "POST", body: JSON.stringify(data) }),
   updateRoom: (id: number, data: Partial<Room>) =>

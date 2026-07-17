@@ -16,12 +16,12 @@ function toHM(min: number) { return `${pad(Math.floor(min / 60))}:${pad(min % 60
 function hm(t: string) { return t.slice(0, 5); }
 
 export default function DateTimePicker({
-  zoneId,
+  roomId,
   attendees,
   value,
   onChange,
 }: {
-  zoneId: number | null;
+  roomId: number | null;
   attendees: number;
   value: SlotValue;
   onChange: (v: SlotValue) => void;
@@ -37,31 +37,31 @@ export default function DateTimePicker({
   const [loadingSlots, setLoadingSlots] = useState(false);
 
   useEffect(() => {
-    if (zoneId == null || !attendees) { setDays({}); return; }
+    if (roomId == null || !attendees) { setDays({}); return; }
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     const last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
     let active = true;
     setLoadingDays(true);
     setDaysError(null);
-    api.zoneDays(zoneId, ymd(first), ymd(last), attendees)
+    api.roomDays(roomId, ymd(first), ymd(last), attendees)
       .then((rows) => { if (active) setDays(Object.fromEntries(rows.map((r) => [r.date, r.available]))); })
       .catch((e) => { if (active) { setDays({}); setDaysError((e as Error).message || "Не удалось загрузить даты"); } })
       .finally(() => { if (active) setLoadingDays(false); });
     return () => { active = false; };
-  }, [zoneId, attendees, month]);
+  }, [roomId, attendees, month]);
 
   const anyAvailable = useMemo(() => Object.values(days).some(Boolean), [days]);
 
   useEffect(() => {
-    if (zoneId == null || !attendees || !value.date) { setSlots([]); return; }
+    if (roomId == null || !attendees || !value.date) { setSlots([]); return; }
     let active = true;
     setLoadingSlots(true);
-    api.zoneSlots(zoneId, value.date, attendees)
+    api.roomSlots(roomId, value.date, attendees)
       .then((s) => { if (active) setSlots(s); })
       .catch(() => { if (active) setSlots([]); })
       .finally(() => { if (active) setLoadingSlots(false); });
     return () => { active = false; };
-  }, [zoneId, attendees, value.date]);
+  }, [roomId, attendees, value.date]);
 
   const cells = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
@@ -85,8 +85,8 @@ export default function DateTimePicker({
 
   const todayStr = ymd(new Date());
 
-  if (zoneId == null) {
-    return <div className="dtp-hint">Сначала выберите зону, чтобы увидеть свободные даты и время.</div>;
+  if (roomId == null) {
+    return <div className="dtp-hint">Сначала выберите помещение, чтобы увидеть свободные даты и время.</div>;
   }
   if (!attendees) {
     return <div className="dtp-hint">Укажите число участников, чтобы увидеть свободные даты.</div>;
@@ -121,7 +121,7 @@ export default function DateTimePicker({
         {daysError ? (
           <div className="dtp-hint error-text">Не удалось загрузить свободные даты: {daysError}</div>
         ) : !loadingDays && !anyAvailable ? (
-          <div className="dtp-hint">В этой зоне нет свободных дат в этом месяце для указанного числа участников. Попробуйте другой месяц или зону.</div>
+          <div className="dtp-hint">В этом помещении нет свободных дат в этом месяце для указанного числа участников. Попробуйте другой месяц или помещение.</div>
         ) : null}
       </div>
 

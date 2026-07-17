@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { api, Booking, Company, NewBooking, Prop, RoomStruct, Status, Zone } from "../api";
+import { api, Booking, Company, NewBooking, Prop, Room, RoomStruct, Status } from "../api";
 import { isAdmin } from "../auth";
 import StatusBadge from "../components/StatusBadge";
 import { TableSkeleton } from "../components/Skeleton";
@@ -29,7 +29,7 @@ function fmt(dt: string) {
 }
 
 type FormState = {
-  zone_id: string;
+  room_id: string;
   date: string;
   start: string;
   end: string;
@@ -48,7 +48,6 @@ type FormState = {
   grade: string;
   extra_services: string;
   position: string;
-  trainer: string;
   department: string;
   target_employees: string;
   attendees: string;
@@ -61,7 +60,7 @@ type FormState = {
 };
 
 const EMPTY_FORM: FormState = {
-  zone_id: "",
+  room_id: "",
   date: "",
   start: "",
   end: "",
@@ -80,7 +79,6 @@ const EMPTY_FORM: FormState = {
   grade: "",
   extra_services: "",
   position: "",
-  trainer: "",
   department: "",
   target_employees: "",
   attendees: "1",
@@ -105,7 +103,7 @@ export default function BookingsPage() {
   const [refreshToken, setRefreshToken] = useState(0);
 
   const [creating, setCreating] = useState(false);
-  const [zones, setZones] = useState<Zone[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [propsList, setPropsList] = useState<Prop[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
@@ -132,18 +130,17 @@ export default function BookingsPage() {
     setError(null);
     setForm(EMPTY_FORM);
     setCreating(true);
-    const [zs, cs, ps] = await Promise.all([
-      api.listZones(),
+    const [rs, cs, ps] = await Promise.all([
+      api.listRooms(),
       api.listCompanies(true),
       api.listProps({ activeOnly: true }),
     ]);
-    setZones(zs);
+    // Only active, bookable rooms — coffee-break rooms are logistics-only.
+    const bookable = rs.filter((r) => r.is_active && !r.is_coffee_break);
+    setRooms(bookable);
     setCompanies(cs);
     setPropsList(ps);
-    // Prefer the first zone that actually has rooms — auto-selecting an empty zone
-    // would leave the date picker with every day disabled and no way to proceed.
-    const firstUsable = zs.find((z) => z.room_count > 0) ?? zs[0];
-    if (firstUsable) setForm((f) => ({ ...f, zone_id: String(firstUsable.id) }));
+    if (bookable[0]) setForm((f) => ({ ...f, room_id: String(bookable[0].id) }));
   };
 
   const submit = async () => {
@@ -154,7 +151,7 @@ export default function BookingsPage() {
         .map(([id, amt]) => ({ prop_id: Number(id), amount: parseInt(amt, 10) || 0 }))
         .filter((p) => p.amount > 0);
       const payload: NewBooking = {
-        zone_id: parseInt(form.zone_id, 10),
+        room_id: parseInt(form.room_id, 10),
         company: form.company.trim(),
         company_id: form.company_id ? parseInt(form.company_id, 10) : null,
         room_struct: form.room_struct || null,
@@ -170,7 +167,6 @@ export default function BookingsPage() {
         grade: form.grade || null,
         extra_services: form.extra_services.trim() || null,
         position: form.position.trim() || null,
-        trainer: form.trainer.trim() || null,
         department: isKoinoti(form.company) ? form.department.trim() || null : null,
         target_employees: form.target_employees.trim() || null,
         attendees: parseInt(form.attendees, 10),
@@ -225,7 +221,7 @@ export default function BookingsPage() {
   };
 
   const valid =
-    form.zone_id && form.date && form.start && form.end && form.company && form.contact_name &&
+    form.room_id && form.date && form.start && form.end && form.company && form.contact_name &&
     form.phone && form.customer_telegram_id && form.event_type && form.event_name && form.attendees;
 
   const attendeesNum = parseInt(form.attendees, 10) || 0;
@@ -348,16 +344,16 @@ export default function BookingsPage() {
               <button className="icon-close" onClick={() => setCreating(false)} aria-label="Закрыть">✕</button>
             </div>
             <div className="modal-body">
-              {zones.length === 0 ? (
-                <div className="empty">Нет зон. Создайте зону и помещения в разделе «Помещения».</div>
+              {rooms.length === 0 ? (
+                <div className="empty">Нет помещений. Создайте помещение в разделе «Помещения».</div>
               ) : (
                 <>
                   <div className="row2">
                     <div className="field">
-                      <label>Зона</label>
-                      <select value={form.zone_id} onChange={(e) => setForm({ ...form, zone_id: e.target.value, date: "", start: "", end: "" })}>
-                        {zones.map((z) => (
-                          <option key={z.id} value={z.id}>{z.name}</option>
+                      <label>Помещение</label>
+                      <select value={form.room_id} onChange={(e) => setForm({ ...form, room_id: e.target.value, date: "", start: "", end: "" })}>
+                        {rooms.map((r) => (
+                          <option key={r.id} value={r.id}>{r.name} · {r.zone_name} · до {r.capacity}</option>
                         ))}
                       </select>
                     </div>
@@ -368,12 +364,12 @@ export default function BookingsPage() {
                   <div className="field">
                     <label>Дата и время</label>
                     <DateTimePicker
-                      zoneId={form.zone_id ? parseInt(form.zone_id, 10) : null}
+                      roomId={form.room_id ? parseInt(form.room_id, 10) : null}
                       attendees={attendeesNum}
                       value={{ date: form.date, start: form.start, end: form.end }}
                       onChange={(v) => setForm({ ...form, date: v.date, start: v.start, end: v.end })}
                     />
-                    <span className="field-hint">Система подберёт свободное помещение нужной вместимости в этой зоне.</span>
+                    <span className="field-hint">Показаны свободные даты и время для выбранного помещения.</span>
                   </div>
                   <div className="row2">
                     <div className="field"><label>Название мероприятия</label>
@@ -384,12 +380,8 @@ export default function BookingsPage() {
                         {EVENT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                       </select></div>
                   </div>
-                  <div className="row2">
-                    <div className="field"><label>Должность заявителя</label>
-                      <input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} placeholder="напр. HR-менеджер" /></div>
-                    <div className="field"><label>Тренер мероприятия</label>
-                      <input value={form.trainer} onChange={(e) => setForm({ ...form, trainer: e.target.value })} placeholder="ФИО тренера" /></div>
-                  </div>
+                  <div className="field"><label>Должность заявителя</label>
+                    <input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} placeholder="напр. HR-менеджер" /></div>
                   {isKoinoti(form.company) && (
                     <div className="field"><label>Департамент / Отдел (КОИНОТИ НАВ)</label>
                       <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="напр. Департамент цифровизации" /></div>
@@ -514,7 +506,7 @@ export default function BookingsPage() {
             </div>
             <div className="modal-foot">
               <button onClick={() => setCreating(false)} disabled={busy}>Отмена</button>
-              <button className="primary" onClick={submit} disabled={busy || !valid || zones.length === 0}>
+              <button className="primary" onClick={submit} disabled={busy || !valid || rooms.length === 0}>
                 {busy ? "Создание…" : "Создать заявку"}
               </button>
             </div>

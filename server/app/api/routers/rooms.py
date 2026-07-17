@@ -1,20 +1,31 @@
 import base64
 import binascii
+from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin, current_user
 from app.db import get_session
 from app.models import Room, RoomImage, Zone
-from app.schemas import RoomCreate, RoomImageOut, RoomImagesIn, RoomOut, RoomUpdate
+from app.schemas import (
+    RoomCreate,
+    RoomImageOut,
+    RoomImagesIn,
+    RoomOut,
+    RoomUpdate,
+    ZoneDayOut,
+    ZoneSlotOut,
+)
+from app.services import availability as avail
 from app.services.bookings import audit
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
 MAX_IMAGES_PER_ROOM = 3
 MAX_IMAGE_BYTES = 15 * 1024 * 1024
+MAX_DAY_RANGE = 62
 
 
 def _looks_like_image(raw: bytes) -> bool:
@@ -35,6 +46,37 @@ async def list_rooms(
     if active_only:
         stmt = stmt.where(Room.is_active.is_(True))
     return list((await session.execute(stmt)).scalars().all())
+
+
+# Single-room availability for the panel booking form (admin picks a room directly,
+# not a zone). Mirrors the zone endpoints but scoped to one room; any panel user may read.
+@router.get("/{room_id}/days", response_model=list[ZoneDayOut])
+async def room_days(
+    room_id: int,
+    date_from: date = Query(...),
+    date_to: date = Query(...),
+    attendees: int = Query(1, ge=1),
+    _: tuple[int, str] = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ZoneDayOut]:
+    if date_to < date_from:
+        raise HTTPException(400, "date_to before date_from")
+    if (date_to - date_from).days > MAX_DAY_RANGE:
+        date_to = date_from + timedelta(days=MAX_DAY_RANGE)
+    days = await avail.room_available_days(session, room_id, date_from, date_to, attendees)
+    return [ZoneDayOut(date=d, available=a) for d, a in sorted(days.items())]
+
+
+@router.get("/{room_id}/slots", response_model=list[ZoneSlotOut])
+async def room_slots(
+    room_id: int,
+    on: date = Query(...),
+    attendees: int = Query(1, ge=1),
+    _: tuple[int, str] = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> list[ZoneSlotOut]:
+    slots = await avail.room_day_slots(session, room_id, on, attendees)
+    return [ZoneSlotOut(start=s, end=e) for s, e in slots]
 
 
 @router.post("", response_model=RoomOut, status_code=201)

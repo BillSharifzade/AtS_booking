@@ -6,10 +6,25 @@ from aiogram.exceptions import TelegramAPIError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 from app.config import settings
+from app.db import SessionLocal
 from app.models import Booking, BookingStatus, Room
+from app.services.access import all_admin_ids
 from app.telegram import esc, get_bot, send_text
 
 log = logging.getLogger(__name__)
+
+
+async def _admin_ids() -> set[int]:
+    """Resolve every admin recipient (env superadmins + panel ``admin`` accounts).
+
+    Opens its own short-lived session: notifications are sent *after* the request's
+    session has been committed/closed, so we can't rely on a caller-supplied one."""
+    try:
+        async with SessionLocal() as session:
+            return await all_admin_ids(session)
+    except Exception:  # pragma: no cover - never let a lookup failure drop the notice
+        log.exception("failed to resolve panel admins; falling back to env admins")
+        return set(settings.admin_telegram_ids)
 
 
 async def request_feedback(booking: Booking) -> None:
@@ -114,8 +129,17 @@ async def notify_new(booking: Booking, room: Room) -> None:
         urgent=" (СРОЧНАЯ)" if booking.is_urgent else "",
         card=_booking_card(booking, room, show_zone=True),
     )
-    for admin_id in settings.admin_telegram_ids:
+    for admin_id in await _admin_ids():
         await send_text(admin_id, admin_msg)
+
+
+# Short admin-facing label for each status a booking can transition into.
+_STATUS_ADMIN_LABELS = {
+    BookingStatus.approved: "подтверждена",
+    BookingStatus.rejected: "отклонена",
+    BookingStatus.completed: "завершена",
+    BookingStatus.archived: "перенесена в архив",
+}
 
 
 async def notify_status_change(booking: Booking, room: Room, new_status: BookingStatus) -> None:
@@ -136,6 +160,15 @@ async def notify_status_change(booking: Booking, room: Room, new_status: Booking
         )
     elif new_status == BookingStatus.completed:
         await request_feedback(booking)
+
+    # Keep every administrator in the loop on status changes, not just the one who acted.
+    label = _STATUS_ADMIN_LABELS.get(new_status)
+    if label:
+        admin_msg = f"Заявка №{booking.id} «{esc(booking.event_name)}» {label}."
+        if new_status == BookingStatus.rejected and booking.reject_reason:
+            admin_msg += f"\nПричина: {esc(booking.reject_reason)}"
+        for admin_id in await _admin_ids():
+            await send_text(admin_id, admin_msg)
 
 
 async def notify_room_changed(booking: Booking, room: Room) -> None:

@@ -26,6 +26,18 @@ async def resolve_role(session: AsyncSession, telegram_id: int) -> str | None:
     return row.role if row is not None else None
 
 
+async def all_admin_ids(session: AsyncSession) -> set[int]:
+    """Every Telegram id that should receive admin notifications: the env superadmins
+    plus any panel_users stored with the ``admin`` role. Viewers are read-only and are
+    deliberately excluded."""
+    ids = set(settings.admin_telegram_ids)
+    rows = (
+        await session.execute(select(PanelUser.telegram_id).where(PanelUser.role == ADMIN))
+    ).scalars().all()
+    ids.update(rows)
+    return ids
+
+
 async def get_panel_users(session: AsyncSession) -> list[PanelUser]:
     return list(
         (await session.execute(select(PanelUser).order_by(PanelUser.created_at))).scalars().all()
