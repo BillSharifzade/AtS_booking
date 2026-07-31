@@ -974,8 +974,10 @@ tbody tr:nth-child(n+9) { animation-delay: 0.26s; }
 }
 .stat-row-mini b { color: var(--ink); font-weight: 600; }
 
-.dash-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
-.dash-grid .card { margin-bottom: 0; }
+.dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.dash-grid .card { margin-bottom: 0; min-width: 0; }
+/* Full-width rows: the trend chart and the upcoming-events list. */
+.dash-grid .span-2 { grid-column: 1 / -1; }
 .dash-empty { color: var(--muted); font-size: 13.5px; padding: 8px 0; }
 
 .bar-list { display: flex; flex-direction: column; gap: 13px; }
@@ -1016,67 +1018,48 @@ tbody tr:nth-child(n+9) { animation-delay: 0.26s; }
 .mini-table th:first-child, .mini-table td:first-child { padding-left: 2px; }
 .mini-table td.n, .mini-table th.n { text-align: right; font-variant-numeric: tabular-nums; }
 
-/* ---------- Booking-frequency column chart ---------- */
-/* One series, one hue. Bars are capped and separated by surface-coloured gaps —
-   no strokes. Gridlines are solid hairlines one step off the surface. */
-.trend { position: relative; }
-.trend-head { display: flex; justify-content: flex-end; margin-bottom: 6px; }
-.trend-toggle {
+/* ---------- Charts (Recharts) ---------- */
+.dash-body { transition: opacity 0.2s var(--ease); }
+.dash-body.refetching { opacity: 0.55; }
+
+.chart-card { display: flex; flex-direction: column; }
+.chart-head-right { display: flex; align-items: center; gap: 10px; }
+.chart-note { font-size: 12px; color: var(--muted-2); white-space: nowrap; }
+.chart-toggle {
   background: transparent; border: 1px solid var(--border-strong); color: var(--muted);
-  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px;
   transition: color 0.16s var(--ease), border-color 0.16s var(--ease), background 0.16s var(--ease);
 }
-.trend-toggle:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.chart-toggle:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); box-shadow: none; }
+.chart-table-wrap { max-height: 260px; overflow-y: auto; }
 
-/* 16px of headroom above the plot so the peak label on a full-height bar has room. */
-.trend-plot { position: relative; height: 184px; }
-.trend-ticks { position: absolute; top: 16px; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; justify-content: space-between; }
-.trend-tick { position: relative; display: flex; align-items: center; gap: 6px; height: 0; }
-.trend-tick-label {
-  width: 24px; text-align: right; flex-shrink: 0;
-  font-size: 10.5px; color: var(--muted-2); font-variant-numeric: tabular-nums;
-}
-.trend-tick-line { flex: 1; height: 1px; background: var(--border); }
+/* Recharts draws focus rings on the SVG root; the card already frames the chart. */
+.recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
 
-.trend-cols { position: absolute; top: 16px; right: 0; bottom: 0; left: 30px; display: flex; align-items: flex-end; gap: 2px; }
-.trend-col {
-  position: relative; flex: 1; min-width: 0; height: 100%;
-  display: flex; align-items: flex-end; justify-content: center;
-  cursor: default; outline: none;
+.viz-tip {
+  display: flex; flex-direction: column; gap: 2px;
+  background: var(--black); color: #fff;
+  padding: 8px 11px; border-radius: var(--radius-sm);
+  font-size: 11.5px; line-height: 1.5; white-space: nowrap;
+  box-shadow: var(--shadow-md);
 }
-.trend-bar {
-  position: relative;
-  display: block; width: 100%; max-width: 24px; min-height: 2px;
-  background: var(--accent);
-  border-radius: 4px 4px 0 0;
-  transition: background 0.16s var(--ease), height 0.28s var(--ease);
-}
-.trend-col:hover .trend-bar, .trend-col.on .trend-bar, .trend-col:focus-visible .trend-bar { background: var(--accent-deep); }
-.trend-peak {
-  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px;
-  font-size: 10.5px; font-weight: 700; color: var(--muted);
-  font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+.viz-tip b { font-size: 12.5px; margin-bottom: 1px; }
+.viz-tip span { color: rgba(255, 255, 255, 0.72); display: flex; align-items: center; gap: 6px; }
+.viz-tip em { font-style: normal; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+.viz-tip-dot { width: 8px; height: 8px; border-radius: 999px; flex-shrink: 0; }
+
+/* Donut + its legend: identity comes from the swatch and the label, not the hue alone. */
+.donut-row { display: grid; grid-template-columns: minmax(0, 168px) minmax(0, 1fr); gap: 16px; align-items: center; }
+.viz-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.viz-legend li { display: flex; align-items: center; gap: 8px; font-size: 12.5px; min-width: 0; }
+.viz-swatch { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.viz-legend-name { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.viz-legend-val { margin-left: auto; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .donut-row { grid-template-columns: 1fr; }
 }
 
-.trend-tip {
-  position: absolute; top: 0; transform: translateX(-50%);
-  display: flex; flex-direction: column; gap: 1px;
-  background: var(--black); color: #fff; padding: 7px 10px; border-radius: var(--radius-sm);
-  font-size: 11.5px; line-height: 1.45; white-space: nowrap; pointer-events: none;
-  box-shadow: var(--shadow-md); z-index: 3;
-}
-.trend-tip.start { transform: translateX(0); }
-.trend-tip.end { transform: translateX(-100%); }
-.trend-tip b { font-size: 12px; }
-.trend-tip span { color: rgba(255, 255, 255, 0.78); }
-
-.trend-xaxis { display: flex; gap: 2px; margin-left: 30px; margin-top: 7px; }
-.trend-x {
-  flex: 1; min-width: 0; text-align: center;
-  font-size: 10.5px; color: var(--muted-2); font-variant-numeric: tabular-nums;
-  white-space: nowrap; overflow: visible;
-}
-.trend-table-wrap { max-height: 260px; overflow-y: auto; }
 
 @media (max-width: 1200px) {
   .stat-grid { grid-template-columns: repeat(3, 1fr); }

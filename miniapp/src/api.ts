@@ -128,6 +128,30 @@ export type CalendarEvent = {
   participants: number | null;
 };
 
+// Confirmed bookings of the current month, published on the landing calendar.
+export type PublicBooking = {
+  id: number;
+  event_date: string;
+  start_time: string;
+  end_time: string;
+  event_name: string;
+  event_type: string;
+  room: string;
+  company: string;
+  attendees: number;
+  room_struct: RoomStruct | null;
+  held: boolean;
+};
+
+export type MonthCalendar = {
+  month: string;
+  label: string;
+  total: number;
+  total_hours: number;
+  total_attendees: number;
+  events: PublicBooking[];
+};
+
 export const companyLogoUrl = (id: number) => `${BASE}/companies/${id}/logo`;
 export const roomImageUrl = (roomId: number, imageId: number) => `${BASE}/rooms/${roomId}/images/${imageId}/raw`;
 
@@ -135,6 +159,7 @@ export const api = {
   bootstrap: () => request<Bootstrap>("/client/bootstrap"),
   landing: () => request<LandingContent>("/site/landing"),
   events: () => request<CalendarEvent[]>("/site/events"),
+  monthCalendar: () => request<MonthCalendar>("/site/month-calendar"),
   roomDays: (id: number, from: string, to: string, attendees: number) =>
     request<ZoneDay[]>(`/client/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
   roomSlots: (id: number, on: string, attendees: number) =>

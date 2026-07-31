@@ -8,16 +8,17 @@ the key ``landing`` — falling back to :data:`DEFAULT_LANDING` until an admin s
 import base64
 import binascii
 import json
-from datetime import date
+from datetime import date, datetime, time, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_admin
 from app.config import local_now
 from app.db import get_session
-from app.models import CalendarEvent, SiteContent
+from app.models import Booking, BookingStatus, CalendarEvent, SiteContent
 from app.schemas import (
     CalendarEventOut,
     CalendarImport,
@@ -26,6 +27,8 @@ from app.schemas import (
     LandingEcosystemItem,
     LandingSocials,
     LandingStat,
+    MonthCalendarOut,
+    PublicBookingOut,
 )
 from app.services.bookings import audit
 from app.services.calendar_import import parse_calendar_xlsx
@@ -188,6 +191,55 @@ async def import_events(
         imported=len(events),
         months=[f"{_RU_MONTHS[m]} {y}" for y, m in months],
         events=[CalendarEventOut.model_validate(e) for e in events],
+    )
+
+
+@router.get("/month-calendar", response_model=MonthCalendarOut)
+async def month_calendar(session: AsyncSession = Depends(get_session)) -> MonthCalendarOut:
+    """Public: confirmed bookings of the CURRENT month, for the landing calendar.
+
+    Always the month that contains "today" in the business timezone, so it rolls over
+    on its own with no admin action. Only ``approved``/``completed`` bookings are
+    published — pending and rejected requests never surface publicly."""
+    today = local_now().date()
+    start, end = _month_start(today), _month_start(today, 1)
+    stmt = (
+        select(Booking)
+        .options(selectinload(Booking.room))
+        .where(
+            Booking.status.in_([BookingStatus.approved, BookingStatus.completed]),
+            Booking.starts_at >= datetime.combine(start, time.min, tzinfo=timezone.utc),
+            Booking.starts_at < datetime.combine(end, time.min, tzinfo=timezone.utc),
+        )
+        .order_by(Booking.starts_at, Booking.id)
+    )
+    bookings = list((await session.execute(stmt)).scalars().all())
+
+    now = local_now()
+    events = [
+        PublicBookingOut(
+            id=b.id,
+            event_date=b.starts_at.date(),
+            start_time=b.starts_at.strftime("%H:%M"),
+            end_time=b.ends_at.strftime("%H:%M"),
+            event_name=b.event_name,
+            event_type=b.event_type,
+            room=b.room.name if b.room else "—",
+            company=b.company,
+            attendees=b.attendees,
+            room_struct=b.room_struct,
+            held=b.status == BookingStatus.completed or b.ends_at <= now,
+        )
+        for b in bookings
+    ]
+    total_hours = sum((b.ends_at - b.starts_at).total_seconds() for b in bookings) / 3600.0
+    return MonthCalendarOut(
+        month=f"{today:%Y-%m}",
+        label=f"{_RU_MONTHS[today.month]} {today.year}",
+        total=len(events),
+        total_hours=round(total_hours, 1),
+        total_attendees=sum(b.attendees for b in bookings),
+        events=events,
     )
 
 

@@ -4,9 +4,13 @@ import { api, DashboardSummary, Status } from "../api";
 import { ROOM_STRUCT_LABELS, STATUS_LABELS } from "../labels";
 import { CardSkeleton } from "../components/Skeleton";
 import Stars from "../components/Stars";
-import TrendChart from "../components/TrendChart";
-
-const RU_WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+import ChartCard from "../components/charts/ChartCard";
+import HBarChart from "../components/charts/HBarChart";
+import StatusChart, { StatusDatum } from "../components/charts/StatusChart";
+import StructDonut, { StructDatum } from "../components/charts/StructDonut";
+import TrendChart from "../components/charts/TrendChart";
+import WeekdayChart from "../components/charts/WeekdayChart";
+import { ru } from "../components/charts/theme";
 
 // ---- date helpers (YYYY-MM-DD in local wall-clock; backend treats these as UTC days) ----
 function iso(d: Date): string {
@@ -37,20 +41,12 @@ const PRESETS: { key: Exclude<Preset, "custom">; label: string }[] = [
 ];
 
 const STATUS_ORDER: Status[] = ["new", "approved", "completed", "rejected", "archived"];
+const RU_WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 
-const num = (n: number) => n.toLocaleString("ru-RU");
+const hrs = (n: number) => n.toLocaleString("ru-RU");
 
 function fmtDateTime(s: string) {
   return new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
-}
-
-function Bar({ value, max, className }: { value: number; max: number; className?: string }) {
-  const pct = max > 0 ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className="bar-track">
-      <div className={`bar-fill ${className ?? ""}`} style={{ width: `${Math.max(pct, value > 0 ? 4 : 0)}%` }} />
-    </div>
-  );
 }
 
 export default function DashboardPage() {
@@ -102,9 +98,44 @@ export default function DashboardPage() {
     [data, pending],
   );
 
-  const statusMax = Math.max(1, ...STATUS_ORDER.map((s) => data?.by_status[s] ?? 0));
-  const zoneMax = Math.max(1, ...(data?.by_zone ?? []).map((z) => z.count));
-  const weekdayMax = Math.max(1, ...(data?.by_weekday ?? []).map((w) => w.count));
+  const statusData: StatusDatum[] = useMemo(
+    () => STATUS_ORDER.map((s) => ({ status: s, label: STATUS_LABELS[s], count: data?.by_status[s] ?? 0 })),
+    [data],
+  );
+  const structData: StructDatum[] = useMemo(
+    () =>
+      Object.entries(data?.by_struct ?? {})
+        .sort((a, b) => b[1] - a[1])
+        .map(([key, count]) => ({ key, label: ROOM_STRUCT_LABELS[key] ?? key, count })),
+    [data],
+  );
+  const roomBars = useMemo(
+    () =>
+      (data?.top_rooms ?? []).map((r) => ({
+        name: r.room,
+        value: r.hours,
+        tipTitle: `${r.room} · ${r.zone}`,
+        tip: [
+          { label: "часов", value: hrs(r.hours) },
+          { label: "заявок", value: ru(r.count) },
+          { label: "участников", value: ru(r.attendees) },
+        ],
+      })),
+    [data],
+  );
+  const zoneBars = useMemo(
+    () =>
+      (data?.by_zone ?? []).map((z) => ({
+        name: z.zone,
+        value: z.count,
+        tip: [
+          { label: "заявок", value: ru(z.count) },
+          { label: "участников", value: ru(z.attendees) },
+        ],
+      })),
+    [data],
+  );
+
   const weekdayTotal = (data?.by_weekday ?? []).reduce((s, w) => s + w.count, 0);
 
   return (
@@ -118,6 +149,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* One filter row scoping everything below it. */}
       <div className="dash-period">
         <div className="chips">
           {PRESETS.map((p) => (
@@ -153,124 +185,140 @@ export default function DashboardPage() {
       ) : !data ? (
         <div className="empty">Нет данных.</div>
       ) : (
-        <>
+        // Hold the previous render at reduced opacity on refetch — no skeleton flash.
+        <div className={loading ? "dash-body refetching" : "dash-body"}>
           <div className="stat-grid">
             {kpis.map((k) => (
               <div key={k.label} className={`stat-card tone-${k.tone}`}>
-                <div className="stat-value">{num(k.value)}</div>
+                <div className="stat-value">{ru(k.value)}</div>
                 <div className="stat-label">{k.label}</div>
               </div>
             ))}
           </div>
 
           <div className="stat-row-mini">
-            <span><b>{data.total_hours.toLocaleString("ru-RU")} ч</b> забронировано всего</span>
-            <span><b>{data.bookings_per_week != null ? data.bookings_per_week.toLocaleString("ru-RU") : "—"}</b> заявок в неделю</span>
-            <span><b>{data.avg_booking_hours != null ? `${data.avg_booking_hours.toLocaleString("ru-RU")} ч` : "—"}</b> средняя длительность</span>
-            <span><b>{num(data.total_attendees)}</b> участников суммарно</span>
-            <span><b>{num(data.coffee_breaks)}</b> с кофе-брейком (всего {num(data.coffee_headcount)} кофе-брейков)</span>
+            <span><b>{hrs(data.total_hours)} ч</b> забронировано всего</span>
+            <span><b>{data.bookings_per_week != null ? hrs(data.bookings_per_week) : "—"}</b> заявок в неделю</span>
+            <span><b>{data.avg_booking_hours != null ? `${hrs(data.avg_booking_hours)} ч` : "—"}</b> средняя длительность</span>
+            <span><b>{ru(data.total_attendees)}</b> участников суммарно</span>
+            <span><b>{ru(data.coffee_breaks)}</b> с кофе-брейком (всего {ru(data.coffee_headcount)} кофе-брейков)</span>
             <span><b>{data.approval_rate != null ? `${Math.round(data.approval_rate * 100)}%` : "—"}</b> одобрено</span>
             <span><b>{data.completion_rate != null ? `${Math.round(data.completion_rate * 100)}%` : "—"}</b> проведено</span>
             <span><b>{data.avg_lead_hours != null ? `${Math.round(data.avg_lead_hours)} ч` : "—"}</b> средний срок до события</span>
-            <span><b>{num(data.active_rooms)}</b> активных помещений · <b>{num(data.active_companies)}</b> компаний</span>
-          </div>
-
-          <div className="card">
-            <div className="card-head">
-              <h3>Частота бронирований</h3>
-              <span className="muted" style={{ fontSize: 12 }}>
-                {data.trend_bucket === "month" ? "по месяцам" : "по дням"} · заявок за период
-              </span>
-            </div>
-            <TrendChart points={data.trend} />
+            <span><b>{ru(data.active_rooms)}</b> активных помещений · <b>{ru(data.active_companies)}</b> компаний</span>
           </div>
 
           <div className="dash-grid">
-            <div className="card">
-              <h3>По статусам</h3>
-              <div className="bar-list">
-                {STATUS_ORDER.map((s) => {
-                  const v = data.by_status[s] ?? 0;
-                  return (
-                    <div className="bar-item" key={s}>
-                      <div className="bar-name">{STATUS_LABELS[s]}</div>
-                      <Bar value={v} max={statusMax} className={`bar-${s}`} />
-                      <div className="bar-val">{num(v)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="card">
-              <h3>Загруженность зон</h3>
-              {data.by_zone.length === 0 ? (
-                <div className="dash-empty">За период нет заявок.</div>
-              ) : (
-                <div className="bar-list">
-                  {data.by_zone.map((z) => (
-                    <div className="bar-item" key={z.zone}>
-                      <div className="bar-name">{z.zone}</div>
-                      <Bar value={z.count} max={zoneMax} className="bar-zone" />
-                      <div className="bar-val">{num(z.count)} · {num(z.attendees)} чел.</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="card">
-              <div className="card-head">
-                <h3>Ближайшие мероприятия</h3>
-                <span className="muted" style={{ fontSize: 12 }}>подтверждённые</span>
-              </div>
-              {data.upcoming.length === 0 ? (
-                <div className="dash-empty">Запланированных мероприятий нет.</div>
-              ) : (
-                <div className="up-list">
-                  {data.upcoming.map((u) => (
-                    <button className="up-item" key={u.id} onClick={() => nav(`/bookings/${u.id}`)}>
-                      <div className="up-when">{fmtDateTime(u.starts_at)}</div>
-                      <div className="up-main">
-                        <div className="up-title">
-                          {u.event_name}
-                          {u.is_urgent && <span className="badge urgent">срочно</span>}
-                        </div>
-                        <div className="up-meta">{u.room} · {u.zone} · {num(u.attendees)} чел.</div>
-                      </div>
-                      <span className="up-arrow">→</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="card">
-              <h3>По помещениям</h3>
-              {data.top_rooms.length === 0 ? (
-                <div className="dash-empty">За период нет заявок.</div>
-              ) : (
+            <ChartCard
+              title="Частота бронирований"
+              note={data.trend_bucket === "month" ? "по месяцам" : "по дням"}
+              wide
+              empty={data.trend.length === 0}
+              table={
                 <table className="mini-table">
-                  <thead>
-                    <tr><th>Помещение</th><th>Зона</th><th className="n">Заявок</th><th className="n">Часов</th><th className="n">Участников</th></tr>
-                  </thead>
+                  <thead><tr><th>Период</th><th className="n">Заявок</th><th className="n">Часов</th></tr></thead>
+                  <tbody>
+                    {data.trend.map((p) => (
+                      <tr key={p.key}><td>{p.label}</td><td className="n">{ru(p.count)}</td><td className="n">{hrs(p.hours)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              }
+            >
+              <TrendChart points={data.trend} />
+            </ChartCard>
+
+            <ChartCard
+              title="По статусам"
+              empty={data.total === 0}
+              table={
+                <table className="mini-table">
+                  <thead><tr><th>Статус</th><th className="n">Заявок</th></tr></thead>
+                  <tbody>
+                    {statusData.map((s) => (
+                      <tr key={s.status}><td>{s.label}</td><td className="n">{ru(s.count)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              }
+            >
+              <StatusChart data={statusData} />
+            </ChartCard>
+
+            <ChartCard
+              title="По дням недели"
+              empty={weekdayTotal === 0}
+              table={
+                <table className="mini-table">
+                  <thead><tr><th>День</th><th className="n">Заявок</th><th className="n">Часов</th></tr></thead>
+                  <tbody>
+                    {data.by_weekday.map((w) => (
+                      <tr key={w.weekday}><td>{RU_WEEKDAYS[w.weekday]}</td><td className="n">{ru(w.count)}</td><td className="n">{hrs(w.hours)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              }
+            >
+              <WeekdayChart data={data.by_weekday} />
+            </ChartCard>
+
+            <ChartCard
+              title="По помещениям"
+              note="забронированные часы"
+              empty={roomBars.length === 0}
+              table={
+                <table className="mini-table">
+                  <thead><tr><th>Помещение</th><th>Зона</th><th className="n">Заявок</th><th className="n">Часов</th><th className="n">Участников</th></tr></thead>
                   <tbody>
                     {data.top_rooms.map((r) => (
                       <tr key={`${r.room}/${r.zone}`}>
                         <td>{r.room}</td>
                         <td><span className="badge zone">{r.zone}</span></td>
-                        <td className="n">{num(r.count)}</td>
-                        <td className="n">{r.hours.toLocaleString("ru-RU")}</td>
-                        <td className="n">{num(r.attendees)}</td>
+                        <td className="n">{ru(r.count)}</td>
+                        <td className="n">{hrs(r.hours)}</td>
+                        <td className="n">{ru(r.attendees)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              }
+            >
+              <HBarChart data={roomBars} valueLabel={(v) => `${hrs(v)} ч`} />
+            </ChartCard>
+
+            <ChartCard title="Загруженность зон" note="заявок" empty={zoneBars.length === 0}>
+              <HBarChart data={zoneBars} valueLabel={(v) => ru(v)} nameWidth={92} />
+            </ChartCard>
+
+            <ChartCard title="Расстановки" empty={structData.length === 0}>
+              <StructDonut data={structData} />
+            </ChartCard>
+
+            <section className="card">
+              <div className="card-head"><h3>По компаниям</h3></div>
+              {data.top_companies.length === 0 ? (
+                <div className="dash-empty">За период нет заявок.</div>
+              ) : (
+                <table className="mini-table">
+                  <thead>
+                    <tr><th>Компания</th><th className="n">Заявок</th><th className="n">Часов</th><th className="n">Участников</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.top_companies.map((c) => (
+                      <tr key={c.company}>
+                        <td>{c.company}</td>
+                        <td className="n">{ru(c.count)}</td>
+                        <td className="n">{hrs(c.hours)}</td>
+                        <td className="n">{ru(c.attendees)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               )}
-            </div>
+            </section>
 
-            <div className="card">
-              <h3>Качество обслуживания</h3>
+            <section className="card">
+              <div className="card-head"><h3>Качество обслуживания</h3></div>
               {data.feedback_count === 0 ? (
                 <div className="dash-empty">Отзывов за период нет.</div>
               ) : (
@@ -285,69 +333,38 @@ export default function DashboardPage() {
                     </div>
                   ))}
                   <div className="k" style={{ color: "var(--muted-2)" }}>Отзывов</div>
-                  <div style={{ color: "var(--muted)" }}>{num(data.feedback_count)}</div>
+                  <div style={{ color: "var(--muted)" }}>{ru(data.feedback_count)}</div>
                 </div>
               )}
-            </div>
+            </section>
 
-            <div className="card">
-              <h3>По компаниям</h3>
-              {data.top_companies.length === 0 ? (
-                <div className="dash-empty">За период нет заявок.</div>
+            <section className="card">
+              <div className="card-head">
+                <h3>Ближайшие мероприятия</h3>
+                <span className="chart-note">подтверждённые</span>
+              </div>
+              {data.upcoming.length === 0 ? (
+                <div className="dash-empty">Запланированных мероприятий нет.</div>
               ) : (
-                <table className="mini-table">
-                  <thead>
-                    <tr><th>Компания</th><th className="n">Заявок</th><th className="n">Часов</th><th className="n">Участников</th></tr>
-                  </thead>
-                  <tbody>
-                    {data.top_companies.map((c) => (
-                      <tr key={c.company}>
-                        <td>{c.company}</td>
-                        <td className="n">{num(c.count)}</td>
-                        <td className="n">{c.hours.toLocaleString("ru-RU")}</td>
-                        <td className="n">{num(c.attendees)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-
-            <div className="card">
-              <h3>По дням недели</h3>
-              {weekdayTotal === 0 ? (
-                <div className="dash-empty">За период нет заявок.</div>
-              ) : (
-                <div className="bar-list">
-                  {data.by_weekday.map((w) => (
-                    <div className="bar-item" key={w.weekday}>
-                      <div className="bar-name">{RU_WEEKDAYS[w.weekday]}</div>
-                      <Bar value={w.count} max={weekdayMax} className="bar-zone" />
-                      <div className="bar-val">{num(w.count)} · {w.hours.toLocaleString("ru-RU")} ч</div>
-                    </div>
+                <div className="up-list">
+                  {data.upcoming.map((u) => (
+                    <button className="up-item" key={u.id} onClick={() => nav(`/bookings/${u.id}`)}>
+                      <div className="up-when">{fmtDateTime(u.starts_at)}</div>
+                      <div className="up-main">
+                        <div className="up-title">
+                          {u.event_name}
+                          {u.is_urgent && <span className="badge urgent">срочно</span>}
+                        </div>
+                        <div className="up-meta">{u.room} · {u.zone} · {ru(u.attendees)} чел.</div>
+                      </div>
+                      <span className="up-arrow">→</span>
+                    </button>
                   ))}
                 </div>
               )}
-            </div>
-
-            <div className="card">
-              <h3>Расстановки</h3>
-              {Object.keys(data.by_struct).length === 0 ? (
-                <div className="dash-empty">Расстановка не указывалась.</div>
-              ) : (
-                <div className="bar-list">
-                  {Object.entries(data.by_struct).sort((a, b) => b[1] - a[1]).map(([s, v]) => (
-                    <div className="bar-item" key={s}>
-                      <div className="bar-name">{ROOM_STRUCT_LABELS[s] ?? s}</div>
-                      <Bar value={v} max={Math.max(1, ...Object.values(data.by_struct))} className="bar-approved" />
-                      <div className="bar-val">{num(v)}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            </section>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

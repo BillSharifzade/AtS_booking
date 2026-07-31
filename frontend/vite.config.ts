@@ -9,6 +9,15 @@ const base = process.env.APP_BASE || "/";
 export default defineConfig({
   base,
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // Charts are a big, rarely-changing dependency used by one page. Keeping
+        // them in their own chunk means editing the app doesn't re-download them.
+        manualChunks: { recharts: ["recharts"] },
+      },
+    },
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

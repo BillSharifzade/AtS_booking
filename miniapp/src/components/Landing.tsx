@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, CalendarEvent, LandingContent } from "../api";
 import { haptic } from "../telegram";
 import logoUrl from "../assets/logo.png";
+import MonthEvents from "./MonthEvents";
 
 const RU_MONTHS = ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"];
 const RU_WEEKDAYS = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
@@ -201,6 +202,8 @@ export default function Landing({ onBook }: { onBook: () => void }) {
             ))}
           </section>
         )}
+
+        <MonthEvents />
 
         <EventsCalendar />
 

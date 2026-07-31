@@ -788,6 +788,34 @@ class CalendarEventOut(BaseModel):
     participants: int | None = None
 
 
+class PublicBookingOut(BaseModel):
+    """A confirmed booking as shown on the PUBLIC landing calendar.
+
+    Deliberately narrow: no contact name, phone, telegram id, description, aim or
+    target audience — this is served unauthenticated. The field set mirrors what the
+    imported xlsx calendar already publishes (title / room / company / headcount)."""
+    id: int
+    event_date: date
+    start_time: str  # "09:00"
+    end_time: str    # "12:00"
+    event_name: str
+    event_type: str
+    room: str
+    company: str
+    attendees: int
+    room_struct: str | None = None
+    held: bool  # already finished (status completed, or the end time has passed)
+
+
+class MonthCalendarOut(BaseModel):
+    month: str   # "2026-08"
+    label: str   # "Август 2026"
+    total: int
+    total_hours: float
+    total_attendees: int
+    events: list[PublicBookingOut]
+
+
 class CalendarImport(BaseModel):
     """xlsx payload as base64 (multipart isn't wired; mirrors the logo-upload pattern)."""
     filename: str | None = None
