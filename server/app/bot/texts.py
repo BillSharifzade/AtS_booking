@@ -152,6 +152,33 @@ _TEXT_DEFS: list[tuple[str, str, str, str]] = [
         "Вы на связи с администратором. Напишите сообщение — оно будет передано. /stop — завершить чат.",
     ),
     ("CHAT_STOPPED", "Чат с администратором", "Завершение чата (/stop)", "Чат с администратором завершён."),
+    # Weekly "предстоящие мероприятия" announcement posted to the AtS group every
+    # Monday (services/weekly_digest.py). The per-event lines are built from booking
+    # data and are not editable; these frame the message.
+    (
+        "WEEKLY_GREETING",
+        "Еженедельный отчёт",
+        "Приветствие в сводке",
+        "Добрый день, коллеги",
+    ),
+    (
+        "WEEKLY_HEADING",
+        "Еженедельный отчёт",
+        "Заголовок сводки",
+        "♻️ИНФОРМАЦИЯ о предстоящих мероприятиях:",
+    ),
+    (
+        "WEEKLY_NO_EVENTS",
+        "Еженедельный отчёт",
+        "Пометка «день без мероприятий»",
+        "(нет мероприятий)",
+    ),
+    (
+        "WEEKLY_CAPTION",
+        "Еженедельный отчёт",
+        "Подпись к Excel-файлу",
+        "Мероприятия {period}",
+    ),
 ]
 
 DEFAULTS: dict[str, str] = {k: d for k, _, _, d in _TEXT_DEFS}

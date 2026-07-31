@@ -10,13 +10,41 @@ from app.api.deps import current_user
 from app.config import local_now
 from app.db import get_session
 from app.models import Booking, BookingStatus, Company, Feedback, Room, Zone
-from app.schemas import CompanyStat, DashboardSummary, RoomStat, UpcomingItem, ZoneStat
+from app.schemas import (
+    CompanyStat,
+    DashboardSummary,
+    RoomStat,
+    TrendPoint,
+    UpcomingItem,
+    WeekdayStat,
+    ZoneStat,
+)
 from app.services.bookings import audit
 from app.services.reports import build_bookings_workbook, period_bounds, report_filename
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
 XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# Booked duration of one booking / summed over a group, in hours. Uses Postgres'
+# extract('epoch', interval), which this whole summary already depends on.
+_DURATION_HOURS = func.extract("epoch", Booking.ends_at - Booking.starts_at) / 3600.0
+_HOURS_SUM = func.coalesce(func.sum(func.extract("epoch", Booking.ends_at - Booking.starts_at)), 0) / 3600.0
+
+# Daily buckets stay readable up to about a quarter; longer spans switch to months.
+_TREND_DAILY_MAX_DAYS = 92
+_RU_MONTHS_SHORT = ("янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек")
+
+
+def _trend_point(bucket: datetime, count: int, hours: float, unit: str) -> TrendPoint:
+    if unit == "month":
+        return TrendPoint(
+            key=f"{bucket:%Y-%m}",
+            label=f"{_RU_MONTHS_SHORT[bucket.month - 1]} {bucket:%y}",
+            count=count,
+            hours=round(hours, 1),
+        )
+    return TrendPoint(key=f"{bucket:%Y-%m-%d}", label=f"{bucket:%d.%m}", count=count, hours=round(hours, 1))
 
 
 @router.get("/bookings.xlsx")
@@ -105,17 +133,25 @@ async def summary(
     ).all()
     by_struct = {s: c for s, c in struct_rows}
 
-    # Top companies by booking count.
+    # Top companies by booking count, with the hours they booked and their headcount.
     company_rows = (
         await session.execute(
-            select(Booking.company, func.count(Booking.id))
+            select(
+                Booking.company,
+                func.count(Booking.id),
+                _HOURS_SUM,
+                func.coalesce(func.sum(Booking.attendees), 0),
+            )
             .where(*f)
             .group_by(Booking.company)
-            .order_by(func.count(Booking.id).desc())
-            .limit(5)
+            .order_by(func.count(Booking.id).desc(), _HOURS_SUM.desc())
+            .limit(8)
         )
     ).all()
-    top_companies = [CompanyStat(company=c or "—", count=n) for c, n in company_rows]
+    top_companies = [
+        CompanyStat(company=c or "—", count=n, hours=round(float(h), 1), attendees=a)
+        for c, n, h, a in company_rows
+    ]
 
     # Inventory counts (current, not range-bound).
     active_rooms = (
@@ -148,21 +184,71 @@ async def summary(
     ).all()
     by_zone = [ZoneStat(zone=z, count=c, attendees=a) for z, c, a in zone_rows]
 
-    # Busiest rooms by booking count, with total booked hours.
-    hours_expr = func.coalesce(func.sum(func.extract("epoch", Booking.ends_at - Booking.starts_at)), 0) / 3600.0
+    # Busiest rooms by booking count, with total booked hours and headcount.
     room_rows = (
         await session.execute(
-            select(Room.name, Zone.name, func.count(Booking.id), hours_expr)
+            select(
+                Room.name,
+                Zone.name,
+                func.count(Booking.id),
+                _HOURS_SUM,
+                func.coalesce(func.sum(Booking.attendees), 0),
+            )
             .select_from(Booking)
             .join(Room, Booking.room_id == Room.id)
             .join(Zone, Room.zone_id == Zone.id)
             .where(*f)
             .group_by(Room.name, Zone.name)
-            .order_by(func.count(Booking.id).desc(), hours_expr.desc())
-            .limit(6)
+            .order_by(func.count(Booking.id).desc(), _HOURS_SUM.desc())
+            .limit(10)
         )
     ).all()
-    top_rooms = [RoomStat(room=r, zone=z, count=c, hours=round(float(h), 1)) for r, z, c, h in room_rows]
+    top_rooms = [
+        RoomStat(room=r, zone=z, count=c, hours=round(float(h), 1), attendees=a)
+        for r, z, c, h, a in room_rows
+    ]
+
+    # ---- Booked time & booking frequency over the period ----
+    total_hours, avg_booking_hours = (
+        await session.execute(select(_HOURS_SUM, func.avg(_DURATION_HOURS)).where(*f))
+    ).one()
+
+    # Effective span: for "all time" the range is whatever the data actually covers.
+    span_from, span_to = date_from, date_to
+    if span_from is None or span_to is None:
+        lo, hi = (
+            await session.execute(
+                select(func.min(Booking.starts_at), func.max(Booking.starts_at)).where(*f)
+            )
+        ).one()
+        span_from = span_from or (lo.date() if lo is not None else None)
+        span_to = span_to or (hi.date() if hi is not None else None)
+    span_days = (span_to - span_from).days + 1 if span_from and span_to else None
+
+    trend_bucket = "month" if span_days and span_days > _TREND_DAILY_MAX_DAYS else "day"
+    trunc = func.date_trunc(trend_bucket, Booking.starts_at)
+    trend_rows = (
+        await session.execute(
+            select(trunc, func.count(Booking.id), _HOURS_SUM).where(*f).group_by(trunc).order_by(trunc)
+        )
+    ).all()
+    trend = [_trend_point(b, c, float(h), trend_bucket) for b, c, h in trend_rows]
+
+    # isodow: 1 = Monday … 7 = Sunday. Days with no bookings are filled in as zeros so
+    # the UI always renders a full week.
+    dow = func.extract("isodow", Booking.starts_at)
+    weekday_rows = (
+        await session.execute(
+            select(dow, func.count(Booking.id), _HOURS_SUM).where(*f).group_by(dow).order_by(dow)
+        )
+    ).all()
+    weekday_map = {int(d) - 1: (c, float(h)) for d, c, h in weekday_rows}
+    by_weekday = [
+        WeekdayStat(weekday=i, count=weekday_map.get(i, (0, 0.0))[0], hours=round(weekday_map.get(i, (0, 0.0))[1], 1))
+        for i in range(7)
+    ]
+
+    bookings_per_week = round(total / (span_days / 7), 1) if span_days and total else None
 
     # Next approved events from now (operational "what's next", independent of the range).
     now = local_now()
@@ -213,4 +299,10 @@ async def summary(
         top_companies=top_companies,
         by_struct=by_struct,
         upcoming=upcoming,
+        total_hours=round(float(total_hours), 1),
+        avg_booking_hours=round(float(avg_booking_hours), 1) if avg_booking_hours is not None else None,
+        bookings_per_week=bookings_per_week,
+        trend_bucket=trend_bucket,
+        trend=trend,
+        by_weekday=by_weekday,
     )

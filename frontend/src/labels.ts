@@ -43,14 +43,16 @@ export const ROOM_STRUCT_LABELS: Record<string, string> = {
   class: "Класс",
   banquet: "Банкет",
   u_shaped: "П-образная",
+  conference: "Конференц-расстановка",
 };
 export const ROOM_STRUCT_HINTS: Record<string, string> = {
   theatre: "Ряды стульев лицом к экрану, максимум мест",
   class: "Ряды столов со стульями, есть рабочая поверхность",
   banquet: "Группы за отдельными столами",
   u_shaped: "Столы буквой «П», экран в открытой части",
+  conference: "Длинный стол, по 5 стульев с каждой стороны, экран в начале",
 };
-export const ROOM_STRUCT_ORDER = ["theatre", "class", "banquet", "u_shaped"];
+export const ROOM_STRUCT_ORDER = ["theatre", "class", "banquet", "u_shaped", "conference"];
 
 // Requester grade ("Грейд", #1) — fixed dropdown, order mirrors the backend GRADES.
 export const GRADES = [

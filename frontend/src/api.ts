@@ -60,7 +60,7 @@ export type Room = {
 };
 
 // Seating arrangements ("Расстановка").
-export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped";
+export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped" | "conference";
 
 export type RoomImage = {
   id: number;
@@ -190,7 +190,7 @@ export type BotText = {
 };
 
 export type ZoneStat = { zone: string; count: number; attendees: number };
-export type RoomStat = { room: string; zone: string; count: number; hours: number };
+export type RoomStat = { room: string; zone: string; count: number; hours: number; attendees: number };
 export type UpcomingItem = {
   id: number;
   event_name: string;
@@ -201,7 +201,7 @@ export type UpcomingItem = {
   attendees: number;
   is_urgent: boolean;
 };
-export type CompanyStat = { company: string; count: number };
+export type CompanyStat = { company: string; count: number; hours: number; attendees: number };
 export type DashboardSummary = {
   date_from: string | null;
   date_to: string | null;
@@ -226,7 +226,16 @@ export type DashboardSummary = {
   top_companies: CompanyStat[];
   by_struct: Record<string, number>;
   upcoming: UpcomingItem[];
+  total_hours: number;
+  avg_booking_hours: number | null;
+  bookings_per_week: number | null;
+  trend_bucket: "day" | "month";
+  trend: TrendPoint[];
+  by_weekday: WeekdayStat[];
 };
+
+export type TrendPoint = { key: string; label: string; count: number; hours: number };
+export type WeekdayStat = { weekday: number; count: number; hours: number };
 
 export type PanelUser = {
   telegram_id: number;

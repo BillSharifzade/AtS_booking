@@ -35,6 +35,12 @@ from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
 from app.services.ratelimit import allow
 from app.services.reports import build_bookings_workbook, report_filename
 from app.services.users import upsert_user
+from app.services.weekly_digest import (
+    build_weekly_digest,
+    digest_caption,
+    digest_filename,
+    week_bounds,
+)
 from app.telegram import esc, get_bot, send_document, send_text
 
 router = Router()
@@ -145,6 +151,28 @@ async def report(msg: Message, state: FSMContext) -> None:
         data = await build_bookings_workbook(session)
     ok = await send_document(
         msg.chat.id, data, report_filename(), caption="Бронирования AtS — полная выгрузка."
+    )
+    if not ok:
+        await msg.answer("Не удалось отправить файл отчёта. Попробуйте позже.")
+
+
+@router.message(Command("week"))
+async def week_digest(msg: Message, state: FSMContext) -> None:
+    # Admin-only preview of the Monday 08:00 group announcement (text + weekly xlsx),
+    # delivered privately so it can be checked without posting to the group.
+    if msg.from_user.id not in settings.admin_telegram_ids:
+        await msg.answer("Эта команда доступна только администраторам.")
+        return
+    await state.clear()
+    monday, saturday = week_bounds(local_now().date())
+    async with SessionLocal() as session:
+        messages = await build_weekly_digest(session, monday, saturday)
+        data = await build_bookings_workbook(session, monday, saturday)
+    for chunk in messages:
+        await send_text(msg.chat.id, chunk)
+    ok = await send_document(
+        msg.chat.id, data, digest_filename(monday, saturday),
+        caption=digest_caption(monday, saturday),
     )
     if not ok:
         await msg.answer("Не удалось отправить файл отчёта. Попробуйте позже.")
@@ -623,9 +651,11 @@ async def get_extra_services(msg: Message, state: FSMContext) -> None:
 
 # ---------- Seating arrangement ("Расстановка") — same field as mini app / admin ----------
 def _room_struct_kb() -> InlineKeyboardMarkup:
+    # Driven by ROOM_STRUCT_LABELS (insertion-ordered) so a new layout shows up in the
+    # bot automatically, without this list drifting from the panel / mini app.
     rows = [
-        [InlineKeyboardButton(text=ROOM_STRUCT_LABELS[k], callback_data=f"struct:{k}")]
-        for k in ("theatre", "class", "banquet", "u_shaped")
+        [InlineKeyboardButton(text=label, callback_data=f"struct:{k}")]
+        for k, label in ROOM_STRUCT_LABELS.items()
     ]
     rows.append([InlineKeyboardButton(text="Пропустить", callback_data="struct:skip")])
     return InlineKeyboardMarkup(inline_keyboard=rows)

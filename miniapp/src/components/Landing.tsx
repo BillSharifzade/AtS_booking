@@ -11,6 +11,17 @@ function monthLabel(key: string) { const [y, m] = key.split("-"); return `${RU_M
 // event_date is a bare "YYYY-MM-DD" — parse as UTC to avoid any timezone shift.
 function weekday(iso: string) { return RU_WEEKDAYS[new Date(`${iso}T00:00:00Z`).getUTCDay()]; }
 function dayNum(iso: string) { return iso.slice(8, 10); }
+function todayIso() {
+  // Local wall-clock date, matching how event_date is stored (no timezone shift).
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`;
+}
+// An event counts as held once its day is over, or once its end time has passed today.
+function isHeld(ev: CalendarEvent, today: string, nowHHMM: string) {
+  if (ev.event_date < today) return true;
+  if (ev.event_date > today) return false;
+  return !!ev.end_time && ev.end_time.slice(0, 5) <= nowHHMM;
+}
 
 function EventsCalendar() {
   const [events, setEvents] = useState<CalendarEvent[] | null>(null);
@@ -35,6 +46,8 @@ function EventsCalendar() {
 
   const active = month ?? months[months.length - 1];
   const monthEvents = events.filter((e) => monthKey(e.event_date) === active);
+  const today = todayIso();
+  const nowHHMM = new Date().toTimeString().slice(0, 5);
 
   // Group the selected month by day, preserving date + within-day order.
   const days: { date: string; items: CalendarEvent[] }[] = [];
@@ -61,25 +74,29 @@ function EventsCalendar() {
 
       <div className="lp-days">
         {days.map((d) => (
-          <div key={d.date} className="lp-day">
+          <div key={d.date} className={`lp-day ${d.items.every((ev) => isHeld(ev, today, nowHHMM)) ? "held" : ""}`}>
             <div className="lp-day-date">
               <span className="lp-day-num">{dayNum(d.date)}</span>
               <span className="lp-day-wd">{weekday(d.date)}</span>
             </div>
             <div className="lp-day-events">
-              {d.items.map((ev) => (
-                <article key={ev.id} className="lp-ev">
-                  {ev.time_text && <span className="lp-ev-time">{ev.time_text.replace(/\s+/g, "")}</span>}
-                  <div className="lp-ev-main">
-                    <span className="lp-ev-title">{ev.title}</span>
-                    <div className="lp-ev-chips">
-                      {ev.room && <span className="lp-ev-chip">{ev.room}</span>}
-                      {ev.company && <span className="lp-ev-chip alt">{ev.company}</span>}
-                      {ev.participants ? <span className="lp-ev-chip ghost">{ev.participants} чел.</span> : null}
+              {d.items.map((ev) => {
+                const held = isHeld(ev, today, nowHHMM);
+                return (
+                  <article key={ev.id} className={`lp-ev ${held ? "held" : ""}`}>
+                    {ev.time_text && <span className="lp-ev-time">{ev.time_text.replace(/\s+/g, "")}</span>}
+                    <div className="lp-ev-main">
+                      <span className="lp-ev-title">{ev.title}</span>
+                      <div className="lp-ev-chips">
+                        {held && <span className="lp-ev-chip done">Проведено</span>}
+                        {ev.room && <span className="lp-ev-chip">{ev.room}</span>}
+                        {ev.company && <span className="lp-ev-chip alt">{ev.company}</span>}
+                        {ev.participants ? <span className="lp-ev-chip ghost">{ev.participants} чел.</span> : null}
+                      </div>
                     </div>
-                  </div>
-                </article>
-              ))}
+                  </article>
+                );
+              })}
             </div>
           </div>
         ))}

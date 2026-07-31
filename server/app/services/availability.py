@@ -119,9 +119,10 @@ def _day_starts(
     overall_open: datetime | None = None
     overall_close: datetime | None = None
     for room in rooms:
-        # Clamp each room's hours to the global business window (08:30–17:30).
-        open_dt = _combine(day, effective_open(room))
-        close_dt = _combine(day, effective_close(room))
+        # Clamp each room's hours to the global business window for that weekday
+        # (08:30–17:30, or 10:00–17:00 on Saturday).
+        open_dt = _combine(day, effective_open(room, day))
+        close_dt = _combine(day, effective_close(room, day))
         if close_dt <= open_dt:
             continue
         overall_open = open_dt if overall_open is None else min(overall_open, open_dt)

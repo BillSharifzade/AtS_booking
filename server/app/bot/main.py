@@ -25,6 +25,7 @@ BOT_COMMANDS = [
     BotCommand(command="cancel", description="Отменить текущий ввод"),
     BotCommand(command="whoami", description="Узнать свой Telegram ID"),
     BotCommand(command="report", description="Отчёт XLSX (для администраторов)"),
+    BotCommand(command="week", description="Сводка на неделю (для администраторов)"),
 ]
 
 

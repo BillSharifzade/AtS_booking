@@ -9,8 +9,14 @@ from app.db import SessionLocal
 from app.models import Booking, BookingStatus
 from app.services.bot_texts import refresh_cache
 from app.services.notifications import notify_reminder
-from app.services.reports import build_bookings_workbook, report_filename
-from app.telegram import send_document
+from app.services.reports import build_bookings_workbook
+from app.services.weekly_digest import (
+    build_weekly_digest,
+    digest_caption,
+    digest_filename,
+    week_bounds,
+)
+from app.telegram import send_document, send_text
 
 
 async def _scan_and_send() -> None:
@@ -53,16 +59,22 @@ async def _scan_and_send() -> None:
 
 
 async def _send_weekly_report() -> None:
-    """Weekly Excel digest of all bookings to every admin (Integration 4.2)."""
-    if not settings.admin_telegram_ids:
-        return
+    """Weekly digest of the week's confirmed events (Integration 4.2): the plain-text
+    announcement plus the matching Excel export, posted to the AtS group chat and
+    mirrored to every admin. Both cover the same Mon–Sat window."""
+    monday, saturday = week_bounds(local_now().date())
     async with SessionLocal() as session:
-        data = await build_bookings_workbook(session)
-    fname = report_filename()
-    for admin_id in settings.admin_telegram_ids:
-        await send_document(
-            admin_id, data, fname, caption="Еженедельный отчёт по бронированиям AtS."
-        )
+        messages = await build_weekly_digest(session, monday, saturday)
+        data = await build_bookings_workbook(session, monday, saturday)
+    fname = digest_filename(monday, saturday)
+    caption = digest_caption(monday, saturday)
+    # dict.fromkeys: dedupe while keeping the group first, in case an admin ID also
+    # happens to be the configured group chat.
+    chats = dict.fromkeys([settings.sat_bookings_group_chat_id, *sorted(settings.admin_telegram_ids)])
+    for chat_id in chats:
+        for message in messages:
+            await send_text(chat_id, message)
+        await send_document(chat_id, data, fname, caption=caption)
 
 
 def start_scheduler() -> AsyncIOScheduler:

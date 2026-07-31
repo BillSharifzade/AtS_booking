@@ -77,11 +77,24 @@ function UShaped() {
   return <>{out}</>;
 }
 
+function Conference() {
+  // One long boardroom table down the middle, five chairs per side plus a head seat.
+  const out: JSX.Element[] = [];
+  out.push(<rect key="t" x={76} y={36} width={48} height={92} rx={6} className="rsd-table" />);
+  [45, 64, 83, 102, 121].forEach((y, i) => {
+    out.push(seat(63, y, `l${i}`));
+    out.push(seat(137, y, `r${i}`));
+  });
+  out.push(seat(100, 140, "head"));
+  return <>{out}</>;
+}
+
 const SHAPES: Record<RoomStruct, () => JSX.Element> = {
   theatre: Theatre,
   class: ClassRoom,
   banquet: Banquet,
   u_shaped: UShaped,
+  conference: Conference,
 };
 
 export default function RoomStructDiagram({

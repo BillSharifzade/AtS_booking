@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, RULES_RECOMMENDATIONS_URL, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
@@ -456,10 +456,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
 
       {step === 5 && (
         <Section title="Ознакомление с правилами">
-          <p className="rules-intro">
-            {RULES_INTRO}{" "}
-            <a href={RULES_RECOMMENDATIONS_URL} target="_blank" rel="noreferrer">рекомендациями</a>.
-          </p>
+          <p className="rules-intro">{RULES_INTRO}</p>
           <div className="consent-list">
             {RULES_LINKS.map((doc, i) => (
               <label key={i} className="consent-item">

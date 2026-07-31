@@ -8,12 +8,14 @@ the key ``landing`` — falling back to :data:`DEFAULT_LANDING` until an admin s
 import base64
 import binascii
 import json
+from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import current_admin
+from app.config import local_now
 from app.db import get_session
 from app.models import CalendarEvent, SiteContent
 from app.schemas import (
@@ -121,10 +123,29 @@ async def _all_events(session: AsyncSession) -> list[CalendarEvent]:
     )
 
 
+def _month_start(d: date, offset: int = 0) -> date:
+    """First day of the month ``offset`` months after the one containing ``d``."""
+    m = d.month - 1 + offset
+    return date(d.year + m // 12, m % 12 + 1, 1)
+
+
 @router.get("/events", response_model=list[CalendarEventOut])
 async def list_events(session: AsyncSession = Depends(get_session)) -> list[CalendarEvent]:
-    """Public: all calendar events (landing page groups them by month/day)."""
-    return await _all_events(session)
+    """Public: a rolling two-month window — the current and the next month only.
+
+    Earlier months are never published, so the landing can't go stale as the
+    uploaded calendar ages. Events inside the window that have already taken place
+    stay listed (the client marks them as held) rather than disappearing."""
+    today = local_now().date()
+    stmt = (
+        select(CalendarEvent)
+        .where(
+            CalendarEvent.event_date >= _month_start(today),
+            CalendarEvent.event_date < _month_start(today, 2),
+        )
+        .order_by(CalendarEvent.event_date, CalendarEvent.sort_order, CalendarEvent.id)
+    )
+    return list((await session.execute(stmt)).scalars().all())
 
 
 @router.post("/events/import", response_model=CalendarImportResult)

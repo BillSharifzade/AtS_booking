@@ -24,21 +24,33 @@ from app.models import (
 
 URGENT_THRESHOLD = timedelta(days=2)
 
-# Global operating window for events: no earlier than 08:30, no later than 17:30.
-# Rooms may still declare their own (narrower) hours; the effective window is the
-# intersection of the room's hours and this business window.
+# Global operating window for events: 08:30–17:30 on weekdays, and a shorter
+# 10:00–17:00 on Saturday. Rooms may still declare their own (narrower) hours; the
+# effective window is the intersection of the room's hours and the day's window.
 BUSINESS_OPEN = time(8, 30)
 BUSINESS_CLOSE = time(17, 30)
+SATURDAY_OPEN = time(10, 0)
+SATURDAY_CLOSE = time(17, 0)
 
 
-def effective_open(room: Room) -> time:
-    """Earliest bookable start for a room: max of its open time and the business open."""
-    return max(room.open_time, BUSINESS_OPEN)
+def business_hours(day: date) -> tuple[time, time]:
+    """Global open/close for a given date. Saturday runs on a shorter schedule;
+    Sunday is closed entirely and is rejected before this is ever consulted."""
+    if day.weekday() == 5:
+        return SATURDAY_OPEN, SATURDAY_CLOSE
+    return BUSINESS_OPEN, BUSINESS_CLOSE
 
 
-def effective_close(room: Room) -> time:
-    """Latest bookable end for a room: min of its close time and the business close."""
-    return min(room.close_time, BUSINESS_CLOSE)
+def effective_open(room: Room, day: date) -> time:
+    """Earliest bookable start for a room on ``day``: max of its open time and the
+    business open for that weekday."""
+    return max(room.open_time, business_hours(day)[0])
+
+
+def effective_close(room: Room, day: date) -> time:
+    """Latest bookable end for a room on ``day``: min of its close time and the
+    business close for that weekday."""
+    return min(room.close_time, business_hours(day)[1])
 
 
 def is_sunday(dt: datetime | date) -> bool:
@@ -80,7 +92,7 @@ def _capacity_sort_key(room: Room) -> tuple[bool, int, str]:
 
 # Valid seating arrangements ("Расстановка"). Kept as a plain set so a future dynamic
 # layout builder can extend it. Mirrors schemas.ROOM_STRUCTS.
-ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
+ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped", "conference"}
 
 # Valid requester grades ("Грейд"). Mirrors schemas.GRADES.
 GRADES = {
@@ -180,8 +192,8 @@ def validate_window(room: Room, starts_at: datetime, ends_at: datetime) -> None:
         raise BookingError("Бронирование в воскресенье недоступно. Выберите другой день.")
     s = _to_local_time(starts_at)
     e = _to_local_time(ends_at)
-    open_t = effective_open(room)
-    close_t = effective_close(room)
+    open_t = effective_open(room, starts_at.date())
+    close_t = effective_close(room, starts_at.date())
     if s < open_t or e > close_t:
         raise BookingError(
             f"Мероприятие можно проводить с {open_t.strftime('%H:%M')} до {close_t.strftime('%H:%M')}."

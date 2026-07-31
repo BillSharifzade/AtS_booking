@@ -203,6 +203,49 @@ label { display: block; font-size: 12.5px; font-weight: 500; color: var(--muted)
 }
 .sidebar nav a.active .nav-badge { background: #fff; color: var(--accent-deep); box-shadow: none; }
 
+/* ---------- Grouped navigation (Заявки · Аналитика · Настройки) ---------- */
+/* The nav owns the scroll so long sections never push the "Вы вошли как" footer out. */
+.sidebar nav { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: #2a2e36 transparent; }
+.sidebar nav::-webkit-scrollbar { width: 6px; }
+.sidebar nav::-webkit-scrollbar-thumb { background: #2a2e36; border-radius: 999px; }
+.sidebar nav::-webkit-scrollbar-track { background: transparent; }
+
+.nav-group { display: flex; flex-direction: column; gap: 3px; }
+.nav-group + .nav-group { margin-top: 10px; }
+
+.nav-group-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--muted-2);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border-radius: var(--radius-sm);
+  transition: background 0.18s var(--ease), color 0.18s var(--ease);
+}
+.nav-group-head:hover { background: rgba(255, 255, 255, 0.05); color: #fff; }
+.nav-group-head .nav-ico { width: 16px; height: 16px; flex-shrink: 0; opacity: 0.7; }
+.nav-group-head > span { flex: 1; text-align: left; white-space: nowrap; }
+.nav-caret { width: 14px; height: 14px; flex-shrink: 0; opacity: 0.6; transition: transform 0.28s var(--ease); }
+.nav-group.open .nav-caret { transform: rotate(180deg); }
+
+/* Animating grid-template-rows collapses to the content's natural height, so the
+   section slides smoothly without hardcoding a max-height per group. */
+.nav-group-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.28s var(--ease); }
+.nav-group.open .nav-group-body { grid-template-rows: 1fr; }
+.nav-group-inner { display: flex; flex-direction: column; gap: 3px; min-height: 0; overflow: hidden; }
+.nav-group:not(.flat) .nav-group-inner a { padding-left: 20px; }
+
+/* Collapsed rail: no headers, just a divider between the former groups. */
+.layout.collapsed .nav-group + .nav-group { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--black-line); }
+
 .sidebar .who {
   margin-top: auto;
   padding-top: 18px;
@@ -971,6 +1014,69 @@ tbody tr:nth-child(n+9) { animation-delay: 0.26s; }
 .mini-table { box-shadow: none; }
 .mini-table th, .mini-table td { padding: 9px 12px; font-size: 13.5px; }
 .mini-table th:first-child, .mini-table td:first-child { padding-left: 2px; }
+.mini-table td.n, .mini-table th.n { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ---------- Booking-frequency column chart ---------- */
+/* One series, one hue. Bars are capped and separated by surface-coloured gaps —
+   no strokes. Gridlines are solid hairlines one step off the surface. */
+.trend { position: relative; }
+.trend-head { display: flex; justify-content: flex-end; margin-bottom: 6px; }
+.trend-toggle {
+  background: transparent; border: 1px solid var(--border-strong); color: var(--muted);
+  font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+  transition: color 0.16s var(--ease), border-color 0.16s var(--ease), background 0.16s var(--ease);
+}
+.trend-toggle:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+
+/* 16px of headroom above the plot so the peak label on a full-height bar has room. */
+.trend-plot { position: relative; height: 184px; }
+.trend-ticks { position: absolute; top: 16px; right: 0; bottom: 0; left: 0; display: flex; flex-direction: column; justify-content: space-between; }
+.trend-tick { position: relative; display: flex; align-items: center; gap: 6px; height: 0; }
+.trend-tick-label {
+  width: 24px; text-align: right; flex-shrink: 0;
+  font-size: 10.5px; color: var(--muted-2); font-variant-numeric: tabular-nums;
+}
+.trend-tick-line { flex: 1; height: 1px; background: var(--border); }
+
+.trend-cols { position: absolute; top: 16px; right: 0; bottom: 0; left: 30px; display: flex; align-items: flex-end; gap: 2px; }
+.trend-col {
+  position: relative; flex: 1; min-width: 0; height: 100%;
+  display: flex; align-items: flex-end; justify-content: center;
+  cursor: default; outline: none;
+}
+.trend-bar {
+  position: relative;
+  display: block; width: 100%; max-width: 24px; min-height: 2px;
+  background: var(--accent);
+  border-radius: 4px 4px 0 0;
+  transition: background 0.16s var(--ease), height 0.28s var(--ease);
+}
+.trend-col:hover .trend-bar, .trend-col.on .trend-bar, .trend-col:focus-visible .trend-bar { background: var(--accent-deep); }
+.trend-peak {
+  position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); margin-bottom: 3px;
+  font-size: 10.5px; font-weight: 700; color: var(--muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none;
+}
+
+.trend-tip {
+  position: absolute; top: 0; transform: translateX(-50%);
+  display: flex; flex-direction: column; gap: 1px;
+  background: var(--black); color: #fff; padding: 7px 10px; border-radius: var(--radius-sm);
+  font-size: 11.5px; line-height: 1.45; white-space: nowrap; pointer-events: none;
+  box-shadow: var(--shadow-md); z-index: 3;
+}
+.trend-tip.start { transform: translateX(0); }
+.trend-tip.end { transform: translateX(-100%); }
+.trend-tip b { font-size: 12px; }
+.trend-tip span { color: rgba(255, 255, 255, 0.78); }
+
+.trend-xaxis { display: flex; gap: 2px; margin-left: 30px; margin-top: 7px; }
+.trend-x {
+  flex: 1; min-width: 0; text-align: center;
+  font-size: 10.5px; color: var(--muted-2); font-variant-numeric: tabular-nums;
+  white-space: nowrap; overflow: visible;
+}
+.trend-table-wrap { max-height: 260px; overflow-y: auto; }
 
 @media (max-width: 1200px) {
   .stat-grid { grid-template-columns: repeat(3, 1fr); }

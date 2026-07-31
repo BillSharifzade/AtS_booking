@@ -98,7 +98,7 @@ class RoomOut(BaseModel):
 
 # Seating arrangements ("Расстановка"). Stored as plain strings on Booking so a future
 # dynamic layout builder can add custom keys without a schema change.
-ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped"}
+ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped", "conference"}
 
 # Requester grade ("Грейд") — a fixed dropdown. Order defines how the UIs list it.
 GRADES = [
@@ -413,6 +413,7 @@ class RoomStat(BaseModel):
     zone: str
     count: int
     hours: float
+    attendees: int = 0
 
 
 class UpcomingItem(BaseModel):
@@ -429,6 +430,24 @@ class UpcomingItem(BaseModel):
 class CompanyStat(BaseModel):
     company: str
     count: int
+    hours: float = 0.0
+    attendees: int = 0
+
+
+class TrendPoint(BaseModel):
+    """One bucket of the booking-frequency trend. ``key`` is the raw bucket start
+    (YYYY-MM-DD for daily, YYYY-MM for monthly); ``label`` is what the UI prints."""
+    key: str
+    label: str
+    count: int
+    hours: float
+
+
+class WeekdayStat(BaseModel):
+    """Bookings by day of week — 0 = Monday … 6 = Sunday (Sunday is never bookable)."""
+    weekday: int
+    count: int
+    hours: float
 
 
 class DashboardSummary(BaseModel):
@@ -455,6 +474,14 @@ class DashboardSummary(BaseModel):
     top_companies: list[CompanyStat] = []
     by_struct: dict[str, int] = {}
     upcoming: list[UpcomingItem]
+    # Booked-time and frequency analytics over the selected period.
+    total_hours: float = 0.0
+    avg_booking_hours: float | None = None
+    bookings_per_week: float | None = None
+    # "day" ⇒ one point per day, "month" ⇒ one per month (chosen from the span).
+    trend_bucket: str = "day"
+    trend: list[TrendPoint] = []
+    by_weekday: list[WeekdayStat] = []
 
 
 # ----- Companies (#4) -----

@@ -24,7 +24,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped";
+export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped" | "conference";
 export type Status = "new" | "processing" | "approved" | "rejected" | "completed" | "archived";
 
 export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; has_logo: boolean };

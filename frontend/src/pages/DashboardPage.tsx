@@ -4,6 +4,9 @@ import { api, DashboardSummary, Status } from "../api";
 import { ROOM_STRUCT_LABELS, STATUS_LABELS } from "../labels";
 import { CardSkeleton } from "../components/Skeleton";
 import Stars from "../components/Stars";
+import TrendChart from "../components/TrendChart";
+
+const RU_WEEKDAYS = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
 
 // ---- date helpers (YYYY-MM-DD in local wall-clock; backend treats these as UTC days) ----
 function iso(d: Date): string {
@@ -101,11 +104,13 @@ export default function DashboardPage() {
 
   const statusMax = Math.max(1, ...STATUS_ORDER.map((s) => data?.by_status[s] ?? 0));
   const zoneMax = Math.max(1, ...(data?.by_zone ?? []).map((z) => z.count));
+  const weekdayMax = Math.max(1, ...(data?.by_weekday ?? []).map((w) => w.count));
+  const weekdayTotal = (data?.by_weekday ?? []).reduce((s, w) => s + w.count, 0);
 
   return (
     <div className="dash">
       <div className="page-head">
-        <h2>Дашборд</h2>
+        <h2>Аналитика</h2>
         <div className="page-head-actions">
           <button className="primary" onClick={download} disabled={downloading}>
             {downloading ? "Готовлю…" : "↓ Скачать XLSX"}
@@ -159,12 +164,25 @@ export default function DashboardPage() {
           </div>
 
           <div className="stat-row-mini">
+            <span><b>{data.total_hours.toLocaleString("ru-RU")} ч</b> забронировано всего</span>
+            <span><b>{data.bookings_per_week != null ? data.bookings_per_week.toLocaleString("ru-RU") : "—"}</b> заявок в неделю</span>
+            <span><b>{data.avg_booking_hours != null ? `${data.avg_booking_hours.toLocaleString("ru-RU")} ч` : "—"}</b> средняя длительность</span>
             <span><b>{num(data.total_attendees)}</b> участников суммарно</span>
             <span><b>{num(data.coffee_breaks)}</b> с кофе-брейком (всего {num(data.coffee_headcount)} кофе-брейков)</span>
             <span><b>{data.approval_rate != null ? `${Math.round(data.approval_rate * 100)}%` : "—"}</b> одобрено</span>
             <span><b>{data.completion_rate != null ? `${Math.round(data.completion_rate * 100)}%` : "—"}</b> проведено</span>
             <span><b>{data.avg_lead_hours != null ? `${Math.round(data.avg_lead_hours)} ч` : "—"}</b> средний срок до события</span>
             <span><b>{num(data.active_rooms)}</b> активных помещений · <b>{num(data.active_companies)}</b> компаний</span>
+          </div>
+
+          <div className="card">
+            <div className="card-head">
+              <h3>Частота бронирований</h3>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {data.trend_bucket === "month" ? "по месяцам" : "по дням"} · заявок за период
+              </span>
+            </div>
+            <TrendChart points={data.trend} />
           </div>
 
           <div className="dash-grid">
@@ -228,21 +246,22 @@ export default function DashboardPage() {
             </div>
 
             <div className="card">
-              <h3>Самые загруженные помещения</h3>
+              <h3>По помещениям</h3>
               {data.top_rooms.length === 0 ? (
                 <div className="dash-empty">За период нет заявок.</div>
               ) : (
                 <table className="mini-table">
                   <thead>
-                    <tr><th>Помещение</th><th>Зона</th><th>Заявок</th><th>Часов</th></tr>
+                    <tr><th>Помещение</th><th>Зона</th><th className="n">Заявок</th><th className="n">Часов</th><th className="n">Участников</th></tr>
                   </thead>
                   <tbody>
                     {data.top_rooms.map((r) => (
                       <tr key={`${r.room}/${r.zone}`}>
                         <td>{r.room}</td>
                         <td><span className="badge zone">{r.zone}</span></td>
-                        <td>{num(r.count)}</td>
-                        <td>{r.hours.toLocaleString("ru-RU")}</td>
+                        <td className="n">{num(r.count)}</td>
+                        <td className="n">{r.hours.toLocaleString("ru-RU")}</td>
+                        <td className="n">{num(r.attendees)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -272,16 +291,39 @@ export default function DashboardPage() {
             </div>
 
             <div className="card">
-              <h3>Топ компаний</h3>
+              <h3>По компаниям</h3>
               {data.top_companies.length === 0 ? (
                 <div className="dash-empty">За период нет заявок.</div>
               ) : (
+                <table className="mini-table">
+                  <thead>
+                    <tr><th>Компания</th><th className="n">Заявок</th><th className="n">Часов</th><th className="n">Участников</th></tr>
+                  </thead>
+                  <tbody>
+                    {data.top_companies.map((c) => (
+                      <tr key={c.company}>
+                        <td>{c.company}</td>
+                        <td className="n">{num(c.count)}</td>
+                        <td className="n">{c.hours.toLocaleString("ru-RU")}</td>
+                        <td className="n">{num(c.attendees)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            <div className="card">
+              <h3>По дням недели</h3>
+              {weekdayTotal === 0 ? (
+                <div className="dash-empty">За период нет заявок.</div>
+              ) : (
                 <div className="bar-list">
-                  {data.top_companies.map((c) => (
-                    <div className="bar-item" key={c.company}>
-                      <div className="bar-name">{c.company}</div>
-                      <Bar value={c.count} max={Math.max(1, ...data.top_companies.map((x) => x.count))} className="bar-zone" />
-                      <div className="bar-val">{num(c.count)}</div>
+                  {data.by_weekday.map((w) => (
+                    <div className="bar-item" key={w.weekday}>
+                      <div className="bar-name">{RU_WEEKDAYS[w.weekday]}</div>
+                      <Bar value={w.count} max={weekdayMax} className="bar-zone" />
+                      <div className="bar-val">{num(w.count)} · {w.hours.toLocaleString("ru-RU")} ч</div>
                     </div>
                   ))}
                 </div>
