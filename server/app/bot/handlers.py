@@ -17,7 +17,7 @@ from aiogram.types import (
     CallbackQuery,
     WebAppInfo,
 )
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -51,8 +51,10 @@ class Chat_FSM(StatesGroup):
 
 
 class Feedback_FSM(StatesGroup):
-    # After tapping a rating, the bot waits for an optional free-text comment.
+    # After tapping a rating, the bot waits for two optional free-text answers:
+    # a general comment, then suggestions on what to improve.
     comment = State()
+    suggestion = State()
 
 
 class Booking_FSM(StatesGroup):
@@ -675,24 +677,17 @@ async def pick_room_struct(cq: CallbackQuery, state: FSMContext) -> None:
 
 
 # ---------- Equipment ("Оборудование") — same field as mini app / admin ----------
-async def _active_props(session: AsyncSession) -> list[tuple[Prop, int]]:
-    """Active equipment with real-time availability (stock minus what active bookings
-    already hold) — matches what ``validate_props`` enforces at creation."""
+async def _active_props(session: AsyncSession, day: date) -> list[tuple[Prop, int]]:
+    """Active equipment with availability for the chosen event day (stock minus what
+    active bookings ON THAT DAY already hold) — matches what ``validate_props``
+    enforces at creation. Equipment is returned at the end of each day, so yesterday's
+    booking no longer holds anything today."""
     props = (
         await session.execute(
             select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name)
         )
     ).scalars().all()
-    committed = dict(
-        (
-            await session.execute(
-                select(BookingProp.prop_id, func.coalesce(func.sum(BookingProp.amount), 0))
-                .join(Booking, Booking.id == BookingProp.booking_id)
-                .where(Booking.status.in_(svc.ACTIVE_STATUSES))
-                .group_by(BookingProp.prop_id)
-            )
-        ).all()
-    )
+    committed = await svc.props_committed(session, day)
     return [(p, max(p.amount - committed.get(p.id, 0), 0)) for p in props]
 
 
@@ -710,13 +705,13 @@ def _props_kb(items: list[tuple[Prop, int]], selected: dict) -> InlineKeyboardMa
 
 
 async def _ask_props(msg: Message, state: FSMContext) -> None:
+    data = await state.get_data()
     async with SessionLocal() as session:
-        items = await _active_props(session)
+        items = await _active_props(session, date.fromisoformat(data["bdate"]))
     if not items:
         # No equipment configured — skip straight to the coffee-break question.
         await _ask_coffee(msg, state)
         return
-    data = await state.get_data()
     selected = data.get("props") or {}
     await state.update_data(props=selected)
     await state.set_state(Booking_FSM.props_pick)
@@ -731,8 +726,9 @@ async def props_choose(cq: CallbackQuery, state: FSMContext) -> None:
         await _ask_coffee(cq.message, state)
         return
     pid = int(val)
+    data = await state.get_data()
     async with SessionLocal() as session:
-        items = await _active_props(session)
+        items = await _active_props(session, date.fromisoformat(data["bdate"]))
     match = next(((p, a) for p, a in items if p.id == pid), None)
     if match is None:
         await cq.message.answer("Это оборудование недоступно.")
@@ -1276,10 +1272,19 @@ async def feedback_rate(cq: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(fb_booking_id=bid)
 
 
+async def _ask_fb_suggestion(msg: Message, state: FSMContext, bid: int) -> None:
+    """Second open question of the rating step: what could be better."""
+    await state.set_state(Feedback_FSM.suggestion)
+    await state.update_data(fb_booking_id=bid)
+    await msg.answer(
+        "Есть предложения по улучшению? Напишите их или отправьте /skip."
+    )
+
+
 @router.message(Command("skip"), Feedback_FSM.comment)
 async def feedback_skip(msg: Message, state: FSMContext) -> None:
-    await state.clear()
-    await msg.answer("Спасибо за ваш отзыв!")
+    data = await state.get_data()
+    await _ask_fb_suggestion(msg, state, data.get("fb_booking_id"))
 
 
 @router.message(Feedback_FSM.comment)
@@ -1293,6 +1298,27 @@ async def feedback_comment(msg: Message, state: FSMContext) -> None:
         ).scalar_one_or_none()
         if fb is not None and text:
             fb.comment = text
+            await session.commit()
+    await _ask_fb_suggestion(msg, state, bid)
+
+
+@router.message(Command("skip"), Feedback_FSM.suggestion)
+async def feedback_suggestion_skip(msg: Message, state: FSMContext) -> None:
+    await state.clear()
+    await msg.answer("Спасибо за ваш отзыв!")
+
+
+@router.message(Feedback_FSM.suggestion)
+async def feedback_suggestion(msg: Message, state: FSMContext) -> None:
+    data = await state.get_data()
+    bid = data.get("fb_booking_id")
+    text = (msg.text or "").strip()
+    async with SessionLocal() as session:
+        fb = (
+            await session.execute(select(Feedback).where(Feedback.booking_id == bid))
+        ).scalar_one_or_none()
+        if fb is not None and text:
+            fb.suggestion = text
             await session.commit()
     await state.clear()
     await msg.answer("Спасибо за ваш отзыв!")

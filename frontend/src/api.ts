@@ -123,6 +123,7 @@ export type Feedback = {
   service_rating: number | null;
   props_rating: number | null;
   comment: string | null;
+  suggestion: string | null;
   created_at: string;
 };
 
@@ -339,6 +340,7 @@ export type Review = {
   service_rating: number | null;
   props_rating: number | null;
   comment: string | null;
+  suggestion: string | null;
   created_at: string;
 };
 

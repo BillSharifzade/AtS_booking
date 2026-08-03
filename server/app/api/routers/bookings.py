@@ -134,6 +134,7 @@ async def list_reviews(
             service_rating=f.service_rating,
             props_rating=f.props_rating,
             comment=f.comment,
+            suggestion=f.suggestion,
             created_at=f.created_at,
         )
         for b, f in rows

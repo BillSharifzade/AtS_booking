@@ -160,6 +160,9 @@ export const api = {
   landing: () => request<LandingContent>("/site/landing"),
   events: () => request<CalendarEvent[]>("/site/events"),
   monthCalendar: () => request<MonthCalendar>("/site/month-calendar"),
+  // Equipment stock is scoped to the event day, so availability is re-fetched once
+  // the date is known instead of reusing the (date-less) bootstrap counts.
+  propsOn: (on: string) => request<Prop[]>(`/client/props?on=${on}`),
   roomDays: (id: number, from: string, to: string, attendees: number) =>
     request<ZoneDay[]>(`/client/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
   roomSlots: (id: number, on: string, attendees: number) =>
@@ -167,6 +170,6 @@ export const api = {
   createBooking: (data: NewBooking) =>
     request<ClientBooking>("/client/bookings", { method: "POST", body: JSON.stringify(data) }),
   myBookings: () => request<ClientBooking[]>("/client/bookings"),
-  submitFeedback: (id: number, data: { rating: number; room_rating: number | null; service_rating: number | null; props_rating: number | null; comment: string | null }) =>
+  submitFeedback: (id: number, data: { rating: number; room_rating: number | null; service_rating: number | null; props_rating: number | null; comment: string | null; suggestion: string | null }) =>
     request<{ ok: boolean }>(`/client/bookings/${id}/feedback`, { method: "POST", body: JSON.stringify(data) }),
 };

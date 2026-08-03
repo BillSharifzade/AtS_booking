@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_INTRO, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_DOC_LABEL, RULES_DOC_URL, RULES_INTRO_AFTER, RULES_INTRO_BEFORE, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
@@ -160,6 +160,35 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
     [boot.rooms, form.room_id],
   );
   const roomOverCapacity = !!(selectedRoom && attendeesNum > 0 && !roomFits(selectedRoom.capacity, attendeesNum));
+
+  // Equipment stock is scoped to the event day, so availability is re-fetched whenever
+  // the chosen date changes (the bootstrap list has no date and reports total stock).
+  // Amounts already picked are clamped down if the new day has less free, so the user
+  // sees the limit here instead of hitting a rejection on submit.
+  const [dayProps, setDayProps] = useState<Prop[] | null>(null);
+  useEffect(() => {
+    const on = form.slot.date;
+    setDayProps(null);
+    if (!on) return;
+    let alive = true;
+    api.propsOn(on).then((list) => {
+      if (!alive) return;
+      setDayProps(list);
+      setForm((f) => {
+        const capped: Record<number, string> = {};
+        for (const p of list) {
+          const picked = parseInt(f.props[p.id] || "0", 10);
+          if (!picked) continue;
+          const avail = p.available ?? p.amount;
+          if (picked > avail) { if (avail > 0) capped[p.id] = String(avail); }
+          else capped[p.id] = String(picked);
+        }
+        return { ...f, props: capped };
+      });
+    }).catch(() => { /* fall back to the bootstrap counts; creation still validates */ });
+    return () => { alive = false; };
+  }, [form.slot.date]);
+  const propsList = dayProps ?? boot.props;
 
   // Mirror the backend rule (services/bookings.is_urgent): bookings starting in
   // <2 days are urgent automatically, so the checkbox is forced on and locked.
@@ -346,11 +375,16 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       )}
 
       {step === 3 && (
-        <Section title="Оборудование" subtitle="Необязательно — укажите, что нужно">
-          {boot.props.length === 0 ? (
+        <Section
+          title="Оборудование"
+          subtitle={form.slot.date
+            ? `Необязательно — наличие показано на ${form.slot.date.split("-").reverse().join(".")}`
+            : "Необязательно — укажите, что нужно"}
+        >
+          {propsList.length === 0 ? (
             <div className="hint">Список оборудования пуст.</div>
           ) : (
-            boot.props.map((p: Prop) => {
+            propsList.map((p: Prop) => {
               const avail = p.available ?? p.amount;
               const picked = parseInt(form.props[p.id] || "0", 10);
               const left = avail - picked;
@@ -456,7 +490,11 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
 
       {step === 5 && (
         <Section title="Ознакомление с правилами">
-          <p className="rules-intro">{RULES_INTRO}</p>
+          <p className="rules-intro">
+            {RULES_INTRO_BEFORE}
+            <a href={RULES_DOC_URL} target="_blank" rel="noreferrer">{RULES_DOC_LABEL}</a>
+            {RULES_INTRO_AFTER}
+          </p>
           <div className="consent-list">
             {RULES_LINKS.map((doc, i) => (
               <label key={i} className="consent-item">
@@ -642,6 +680,7 @@ function FeedbackSheet({ booking, onClose, onSaved }: { booking: ClientBooking; 
   const [service, setService] = useState(0);
   const [props, setProps] = useState(0);
   const [comment, setComment] = useState("");
+  const [suggestion, setSuggestion] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -655,6 +694,7 @@ function FeedbackSheet({ booking, onClose, onSaved }: { booking: ClientBooking; 
         service_rating: service || null,
         props_rating: props || null,
         comment: comment.trim() || null,
+        suggestion: suggestion.trim() || null,
       });
       haptic("success");
       onSaved();
@@ -673,6 +713,14 @@ function FeedbackSheet({ booking, onClose, onSaved }: { booking: ClientBooking; 
         <RateRow label="Оборудование" value={props} onChange={setProps} />
         <Field label="Комментарий (необязательно)">
           <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} />
+        </Field>
+        <Field label="Предложения по улучшению (необязательно)">
+          <textarea
+            rows={3}
+            value={suggestion}
+            placeholder="Что можно улучшить?"
+            onChange={(e) => setSuggestion(e.target.value)}
+          />
         </Field>
         {err && <div className="error-box">{err}</div>}
         <div className="wizard-foot">

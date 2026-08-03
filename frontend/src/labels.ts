@@ -43,7 +43,7 @@ export const ROOM_STRUCT_LABELS: Record<string, string> = {
   class: "Класс",
   banquet: "Банкет",
   u_shaped: "П-образная",
-  conference: "Конференц-расстановка",
+  conference: "Конференц",
 };
 export const ROOM_STRUCT_HINTS: Record<string, string> = {
   theatre: "Ряды стульев лицом к экрану, максимум мест",

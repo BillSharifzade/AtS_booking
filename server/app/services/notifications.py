@@ -55,7 +55,7 @@ ROOM_STRUCT_LABELS = {
     "class": "Класс",
     "banquet": "Банкет",
     "u_shaped": "П-образная",
-    "conference": "Конференц-расстановка",
+    "conference": "Конференц",
 }
 COFFEE_TYPE_LABELS = {"standard": "стандартный (печенье, кофе, чай, конфеты)", "other": "другое"}
 

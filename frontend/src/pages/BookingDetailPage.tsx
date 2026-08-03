@@ -338,6 +338,7 @@ export default function BookingDetailPage() {
               <><div className="k">Оборудование</div><div><Stars value={b.feedback.props_rating} /></div></>
             )}
             <div className="k">Комментарий</div><div>{b.feedback.comment || "—"}</div>
+            <div className="k">Предложения</div><div>{b.feedback.suggestion || "—"}</div>
           </div>
         </div>
       )}

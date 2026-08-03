@@ -127,34 +127,71 @@ async def has_offtime(
     return (await session.execute(stmt)).scalars().first()
 
 
+def day_bounds(day: date) -> tuple[datetime, datetime]:
+    """Half-open [00:00, next-day 00:00) window for a booking day. Booking times are
+    stored as naive local wall-clock labelled UTC (see the timezone convention), so the
+    bounds are built the same way and compare directly against starts_at."""
+    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    return start, start + timedelta(days=1)
+
+
+async def props_committed(
+    session: AsyncSession,
+    day: date,
+    *,
+    exclude_booking_id: int | None = None,
+) -> dict[int, int]:
+    """How much of each prop is already held on `day`, as {prop_id: amount}.
+
+    Equipment is handed out and returned per event day, so stock is scoped to the
+    calendar day of the booking. Previously this summed EVERY active booking with no
+    time bound, which meant a single clicker used once stayed "in use" forever and
+    blocked every future request for it."""
+    day_start, day_end = day_bounds(day)
+    stmt = (
+        select(BookingProp.prop_id, func.coalesce(func.sum(BookingProp.amount), 0))
+        .join(Booking, Booking.id == BookingProp.booking_id)
+        .where(
+            Booking.status.in_(ACTIVE_STATUSES),
+            Booking.starts_at >= day_start,
+            Booking.starts_at < day_end,
+        )
+        .group_by(BookingProp.prop_id)
+    )
+    if exclude_booking_id is not None:
+        stmt = stmt.where(Booking.id != exclude_booking_id)
+    return dict((await session.execute(stmt)).all())
+
+
 async def validate_props(
     session: AsyncSession,
     requested: list[tuple[int, int]],
     *,
+    day: date,
     exclude_booking_id: int | None = None,
 ) -> list[tuple[Prop, int]]:
-    """Validate a list of (prop_id, amount) against simple global stock: a prop's
-    `amount` must cover everything committed by active bookings plus this request.
+    """Validate a list of (prop_id, amount) against stock for `day`: a prop's `amount`
+    must cover everything committed by active bookings ON THAT DAY plus this request.
     Returns the resolved (Prop, amount) pairs or raises BookingError."""
+    if not requested:
+        return []
+    committed = await props_committed(session, day, exclude_booking_id=exclude_booking_id)
     resolved: list[tuple[Prop, int]] = []
     for prop_id, amount in requested:
         prop = await session.get(Prop, prop_id)
         if prop is None or not prop.is_active:
             raise BookingError("Выбранное оборудование недоступно.")
-        committed_stmt = (
-            select(func.coalesce(func.sum(BookingProp.amount), 0))
-            .join(Booking, Booking.id == BookingProp.booking_id)
-            .where(BookingProp.prop_id == prop_id, Booking.status.in_(ACTIVE_STATUSES))
-        )
-        if exclude_booking_id is not None:
-            committed_stmt = committed_stmt.where(Booking.id != exclude_booking_id)
-        committed = (await session.execute(committed_stmt)).scalar_one()
-        if committed + amount > prop.amount:
-            available = max(prop.amount - committed, 0)
+        held = committed.get(prop_id, 0)
+        if held + amount > prop.amount:
+            available = max(prop.amount - held, 0)
             unit = prop.unit or "шт."
             raise BookingError(
-                f"Недостаточно «{prop.name}»: доступно {available} {unit}, запрошено {amount}."
+                f"Недостаточно «{prop.name}» на выбранную дату: "
+                f"доступно {available} {unit}, запрошено {amount}."
             )
+        # Count this request too, so asking for the same prop twice in one booking
+        # can't slip past the check.
+        committed[prop_id] = held + amount
         resolved.append((prop, amount))
     return resolved
 
@@ -349,7 +386,8 @@ async def create_booking(
     if is_koinoti(company) and department_val is None:
         raise BookingError("Для мероприятий КОИНОТИ НАВ укажите департамент/отдел.")
     # Validate prop stock up-front so we don't create a booking we can't fulfil.
-    resolved_props = await validate_props(session, props or [])
+    # Stock is per event day — see props_committed().
+    resolved_props = await validate_props(session, props or [], day=starts_at.date())
 
     # Spec rule: bookings <2 days out are always urgent; the user can also opt in.
     booking = Booking(

@@ -295,6 +295,9 @@ class Feedback(Base):
     service_rating: Mapped[int | None] = mapped_column(Integer)
     props_rating: Mapped[int | None] = mapped_column(Integer)
     comment: Mapped[str | None] = mapped_column(Text)
+    # Second open question of the rating step: «Предложения по улучшению». Kept separate
+    # from `comment` so the two answers stay distinguishable in the panel.
+    suggestion: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     booking: Mapped[Booking] = relationship(back_populates="feedback")

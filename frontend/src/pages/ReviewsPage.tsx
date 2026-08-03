@@ -44,13 +44,13 @@ export default function ReviewsPage() {
       )}
 
       {loading ? (
-        <TableSkeleton cols={6} rows={5} />
+        <TableSkeleton cols={7} rows={5} />
       ) : items.length === 0 ? (
         <div className="empty">Отзывов пока нет.</div>
       ) : (
         <table className="clickable-rows">
           <thead>
-            <tr><th>Дата</th><th>Заказчик</th><th>Компания</th><th>Зал · зона</th><th>Оценки</th><th>Комментарий</th></tr>
+            <tr><th>Дата</th><th>Заказчик</th><th>Компания</th><th>Зал · зона</th><th>Оценки</th><th>Комментарий</th><th>Предложения</th></tr>
           </thead>
           <tbody>
             {items.map((r) => (
@@ -68,6 +68,7 @@ export default function ReviewsPage() {
                   </div>
                 </td>
                 <td style={{ color: "var(--muted)", maxWidth: 280 }}>{r.comment || "—"}</td>
+                <td style={{ color: "var(--muted)", maxWidth: 280 }}>{r.suggestion || "—"}</td>
               </tr>
             ))}
           </tbody>

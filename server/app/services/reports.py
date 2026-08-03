@@ -87,6 +87,7 @@ _COLUMNS: list[tuple[str, int, Alignment]] = [
     ("Итог мероприятия", 28, _WRAP_TOP),
     ("Оценка", 8, _CENTER),
     ("Отзыв", 34, _WRAP_TOP),
+    ("Предложения по улучшению", 34, _WRAP_TOP),
     ("Создана", 17, _CENTER),
     ("Обновлена", 17, _CENTER),
 ]
@@ -176,6 +177,7 @@ def _write_bookings_sheet(ws, bookings: list[Booking]) -> None:
             _result_text(b),
             b.feedback.rating if b.feedback else "",
             (b.feedback.comment or "") if b.feedback else "",
+            (b.feedback.suggestion or "") if b.feedback else "",
             _fmt_dt(b.created_at),
             _fmt_dt(b.updated_at),
         ])

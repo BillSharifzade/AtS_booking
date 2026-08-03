@@ -7,13 +7,13 @@ through the same service layer as the bot, so all validation/notifications are s
 from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.api.deps import current_customer
 from app.db import get_session
-from app.models import Booking, BookingProp, BookingStatus, Company, Feedback, Prop, Room, RoomImage
+from app.models import Booking, BookingStatus, Company, Feedback, Prop, Room, RoomImage
 from app.schemas import (
     ClientBookingCreate,
     ClientBookingOut,
@@ -91,22 +91,14 @@ async def _rooms_out(session: AsyncSession) -> list[ClientRoomOut]:
     ]
 
 
-async def _props_out(session: AsyncSession) -> list[PropOut]:
-    """Active equipment with REAL-TIME availability (total stock minus amounts held
-    by active bookings) — matches what `validate_props` enforces at creation."""
+async def _props_out(session: AsyncSession, day: date | None = None) -> list[PropOut]:
+    """Active equipment with availability FOR A GIVEN EVENT DAY (stock minus the amounts
+    held by active bookings on that same day) — matches what `validate_props` enforces at
+    creation. With no day (bootstrap, before a date is picked) it reports total stock."""
     props = (
         await session.execute(select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name))
     ).scalars().all()
-    committed = dict(
-        (
-            await session.execute(
-                select(BookingProp.prop_id, func.coalesce(func.sum(BookingProp.amount), 0))
-                .join(Booking, Booking.id == BookingProp.booking_id)
-                .where(Booking.status.in_(svc.ACTIVE_STATUSES))
-                .group_by(BookingProp.prop_id)
-            )
-        ).all()
-    )
+    committed = await svc.props_committed(session, day) if day is not None else {}
     out: list[PropOut] = []
     for p in props:
         po = PropOut.model_validate(p)
@@ -131,6 +123,17 @@ async def bootstrap(
         rooms=await _rooms_out(session),
         props=await _props_out(session),
     )
+
+
+@router.get("/props", response_model=list[PropOut])
+async def props_for_day(
+    on: date = Query(..., description="Event day — availability is scoped to it"),
+    _: dict = Depends(current_customer),
+    session: AsyncSession = Depends(get_session),
+) -> list[PropOut]:
+    """Equipment availability for a specific event day. The mini app calls this once the
+    date is chosen, so the shown counts match what creation will actually accept."""
+    return await _props_out(session, on)
 
 
 @router.get("/rooms/{room_id}/days", response_model=list[ZoneDayOut])
@@ -266,6 +269,7 @@ async def submit_feedback(
         service_rating=payload.service_rating,
         props_rating=payload.props_rating,
         comment=(payload.comment or "").strip() or None,
+        suggestion=(payload.suggestion or "").strip() or None,
     ))
     await session.commit()
     return {"ok": True}

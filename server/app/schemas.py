@@ -219,6 +219,7 @@ class FeedbackOut(BaseModel):
     service_rating: int | None
     props_rating: int | None
     comment: str | None
+    suggestion: str | None
     created_at: datetime
 
 
@@ -625,6 +626,7 @@ class FeedbackCreate(BaseModel):
     service_rating: int | None = Field(default=None, ge=1, le=5)
     props_rating: int | None = Field(default=None, ge=1, le=5)
     comment: str | None = None
+    suggestion: str | None = None
 
 
 # ----- Client Telegram Mini App (#13) -----
@@ -719,7 +721,7 @@ class ClientBookingOut(BaseModel):
 
 
 class ReviewOut(BaseModel):
-    """Admin-facing review row: who/company/room/stars/comment."""
+    """Admin-facing review row: who/company/room/stars/comment/suggestion."""
     booking_id: int
     event_name: str
     company: str
@@ -731,6 +733,7 @@ class ReviewOut(BaseModel):
     service_rating: int | None
     props_rating: int | None
     comment: str | None
+    suggestion: str | None
     created_at: datetime
 
 

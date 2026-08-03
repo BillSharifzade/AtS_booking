@@ -5,7 +5,7 @@ export const ROOM_STRUCT_LABELS: Record<RoomStruct, string> = {
   class: "Класс",
   banquet: "Банкет",
   u_shaped: "П-образная",
-  conference: "Конференц-расстановка",
+  conference: "Конференц",
 };
 export const ROOM_STRUCT_HINTS: Record<RoomStruct, string> = {
   theatre: "Ряды стульев лицом к экрану",
@@ -55,12 +55,18 @@ export function roomFits(capacity: string | null | undefined, attendees: number)
 
 // Participation-rules acknowledgement (#4). Files/links are placeholders until the
 // real documents are supplied — edit RULES_LINKS to point at the actual URLs.
-export const RULES_INTRO =
+export const RULES_DOC_URL =
+  "https://drive.google.com/file/d/16_I5HowLA_bQF7AafkmcIU0Mt2Q2k72q/view?pli=1";
+export const RULES_DOC_LABEL = "Правилами AtS";
+// The intro is split around RULES_DOC_LABEL so that phrase renders as a link to the
+// document instead of plain text (see the step-5 Section in App.tsx).
+export const RULES_INTRO_BEFORE =
   "Мероприятия AtS созданы для развития и повышения профессиональных и личностных навыков " +
   "сотрудников, для раскрытия потенциала, усиления командного духа, а также мотивации и " +
   "вовлечённости сотрудников. Чтобы участие было максимально эффективным и комфортным для всех, " +
   "просим соблюдать несколько простых, но важных правил. Пожалуйста, ознакомьтесь и ознакомьте " +
-  "Ваших сотрудников с рекомендациями и укажите, что ознакомились с Правилами AtS.";
+  "Ваших сотрудников с рекомендациями и укажите, что ознакомились с ";
+export const RULES_INTRO_AFTER = ".";
 export const RULES_LINKS: { label: string; url: string }[] = [
   { label: 'Ознакомился с файлом «Заметка для Компании-Участника мероприятий AtS»', url: "#" },
   { label: 'Ознакомился с файлом «Правила нахождения сотрудников в мероприятиях в "AtS Space"»', url: "#" },
