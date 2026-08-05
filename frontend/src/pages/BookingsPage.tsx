@@ -8,7 +8,7 @@ import { TableSkeleton } from "../components/Skeleton";
 import KanbanBoard from "../components/KanbanBoard";
 import DateTimePicker from "../components/DateTimePicker";
 import RoomStructPicker from "../components/RoomStructPicker";
-import { EVENT_TYPES, GRADES, isKoinoti } from "../labels";
+import { EVENT_TYPES, GRADES, needsDepartment } from "../labels";
 import { useNotifications } from "../notifications";
 
 const VIEW_KEY = "ats_bookings_view";
@@ -57,6 +57,8 @@ type FormState = {
   coffee_other: string;
   foreign_guests: boolean;
   is_urgent: boolean;
+  // Registering an event that already took place (past slots, no notifications).
+  allow_past: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -88,6 +90,7 @@ const EMPTY_FORM: FormState = {
   coffee_other: "",
   foreign_guests: false,
   is_urgent: false,
+  allow_past: false,
 };
 
 export default function BookingsPage() {
@@ -167,7 +170,7 @@ export default function BookingsPage() {
         grade: form.grade || null,
         extra_services: form.extra_services.trim() || null,
         position: form.position.trim() || null,
-        department: isKoinoti(form.company) ? form.department.trim() || null : null,
+        department: askDepartment ? form.department.trim() || null : null,
         target_employees: form.target_employees.trim() || null,
         attendees: parseInt(form.attendees, 10),
         coffee_break: form.coffee_break,
@@ -176,6 +179,7 @@ export default function BookingsPage() {
         coffee_other: form.coffee_break && form.coffee_type === "other" ? form.coffee_other.trim() || null : null,
         foreign_guests: form.coffee_break ? form.foreign_guests : false,
         is_urgent: form.is_urgent,
+        allow_past: form.allow_past,
         starts_at: `${form.date}T${form.start}:00Z`,
         ends_at: `${form.date}T${form.end}:00Z`,
       };
@@ -220,9 +224,15 @@ export default function BookingsPage() {
     actOnRow(id, "rejected", () => api.reject(id, r));
   };
 
+  // Whether this booking must state the department — an explicit per-company switch
+  // (falls back to the name rule for a company typed by hand).
+  const selectedCompany = companies.find((c) => String(c.id) === form.company_id) ?? null;
+  const askDepartment = needsDepartment(selectedCompany, form.company);
+
   const valid =
     form.room_id && form.date && form.start && form.end && form.company && form.contact_name &&
-    form.phone && form.customer_telegram_id && form.event_type && form.event_name && form.attendees;
+    form.phone && form.customer_telegram_id && form.event_type && form.event_name && form.attendees &&
+    (!askDepartment || form.department.trim());
 
   const attendeesNum = parseInt(form.attendees, 10) || 0;
 
@@ -365,13 +375,24 @@ export default function BookingsPage() {
                   </div>
                   <div className="field">
                     <label>Дата и время</label>
+                    <label style={{ fontWeight: 400 }}>
+                      <input type="checkbox" style={{ width: "auto", marginRight: 8 }}
+                        checked={form.allow_past}
+                        onChange={(e) => setForm({ ...form, allow_past: e.target.checked, date: "", start: "", end: "" })} />
+                      Задним числом (мероприятие уже прошло)
+                    </label>
                     <DateTimePicker
                       roomId={form.room_id ? parseInt(form.room_id, 10) : null}
                       attendees={attendeesNum}
+                      allowPast={form.allow_past}
                       value={{ date: form.date, start: form.start, end: form.end }}
                       onChange={(v) => setForm({ ...form, date: v.date, start: v.start, end: v.end })}
                     />
-                    <span className="field-hint">Показаны свободные даты и время для выбранного помещения.</span>
+                    <span className="field-hint">
+                      {form.allow_past
+                        ? "Доступны прошедшие даты. Заказчику и в группу AtS уведомления не отправляются — заявка вносится как запись."
+                        : "Показаны свободные даты и время для выбранного помещения."}
+                    </span>
                   </div>
                   <div className="row2">
                     <div className="field"><label>Название мероприятия</label>
@@ -384,8 +405,8 @@ export default function BookingsPage() {
                   </div>
                   <div className="field"><label>Должность заявителя</label>
                     <input value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} placeholder="напр. HR-менеджер" /></div>
-                  {isKoinoti(form.company) && (
-                    <div className="field"><label>Департамент / Отдел (КОИНОТИ НАВ)</label>
+                  {askDepartment && (
+                    <div className="field"><label>Департамент / Отдел</label>
                       <input value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} placeholder="напр. Департамент цифровизации" /></div>
                   )}
                   <div className="field"><label>Для каких сотрудников предназначен тренинг</label>
@@ -397,7 +418,7 @@ export default function BookingsPage() {
                   <div className="row2">
                     <div className="field"><label>Цель бронирования</label>
                       <input value={form.aim} onChange={(e) => setForm({ ...form, aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></div>
-                    <div className="field"><label>Грейд</label>
+                    <div className="field"><label>Грейд заявителя</label>
                       <select value={form.grade} onChange={(e) => setForm({ ...form, grade: e.target.value })}>
                         <option value="">— не указан —</option>
                         {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}

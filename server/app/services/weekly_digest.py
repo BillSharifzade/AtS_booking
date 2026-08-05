@@ -72,9 +72,9 @@ def _registration(starts_at: datetime) -> str:
     return f"{_hhmm(opens)}-{_hhmm(starts_at)}"
 
 
-def _event_block(booking: Booking, index: int) -> str:
-    """One numbered event. Optional fields are dropped instead of printed empty."""
-    lines = [f"{_marker(index)} Формат мероприятия: {esc(booking.event_type)}"]
+def _event_lines(booking: Booking, marker: str) -> str:
+    """One event block. Optional fields are dropped instead of printed empty."""
+    lines = [f"{marker} Формат мероприятия: {esc(booking.event_type)}"]
     if booking.event_name:
         lines.append(f"📝 Тема: {esc(booking.event_name)}")
     if booking.trainer:
@@ -85,6 +85,27 @@ def _event_block(booking: Booking, index: int) -> str:
     lines.append(f"🏢 Компания: {esc(booking.company)}")
     lines.append(f"👥 Участники: {booking.attendees}")
     return "\n".join(lines)
+
+
+def _event_block(booking: Booking, index: int) -> str:
+    """One numbered event of a day inside the weekly digest."""
+    return _event_lines(booking, _marker(index))
+
+
+# Header of the single-event announcement posted to the AtS group when a booking is
+# confirmed. The body reuses the weekly-digest block so both messages read the same.
+ANNOUNCE_TITLE = "📣 Новое мероприятие"
+
+
+def event_announcement(booking: Booking) -> str:
+    """Group-chat announcement for ONE confirmed booking, in the agreed weekly-digest
+    format (day header + the same field block) rather than the internal admin card."""
+    day = booking.starts_at.date()
+    return (
+        f"{ANNOUNCE_TITLE}\n"
+        f"📅 {WEEKDAY_NAMES[day.weekday()]} {day:%d.%m.%Y}\n\n"
+        f"{_event_lines(booking, '▪️')}"
+    )
 
 
 def _day_block(day: date, bookings: list[Booking]) -> str:

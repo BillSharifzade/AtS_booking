@@ -20,11 +20,14 @@ export default function DateTimePicker({
   attendees,
   value,
   onChange,
+  allowPast = false,
 }: {
   roomId: number | null;
   attendees: number;
   value: SlotValue;
   onChange: (v: SlotValue) => void;
+  /** Keep past days/times selectable — registering an event after the fact. */
+  allowPast?: boolean;
 }) {
   const [month, setMonth] = useState<Date>(() => {
     const base = value.date ? new Date(`${value.date}T00:00:00`) : new Date();
@@ -43,12 +46,12 @@ export default function DateTimePicker({
     let active = true;
     setLoadingDays(true);
     setDaysError(null);
-    api.roomDays(roomId, ymd(first), ymd(last), attendees)
+    api.roomDays(roomId, ymd(first), ymd(last), attendees, allowPast)
       .then((rows) => { if (active) setDays(Object.fromEntries(rows.map((r) => [r.date, r.available]))); })
       .catch((e) => { if (active) { setDays({}); setDaysError((e as Error).message || "Не удалось загрузить даты"); } })
       .finally(() => { if (active) setLoadingDays(false); });
     return () => { active = false; };
-  }, [roomId, attendees, month]);
+  }, [roomId, attendees, month, allowPast]);
 
   const anyAvailable = useMemo(() => Object.values(days).some(Boolean), [days]);
 
@@ -56,12 +59,12 @@ export default function DateTimePicker({
     if (roomId == null || !attendees || !value.date) { setSlots([]); return; }
     let active = true;
     setLoadingSlots(true);
-    api.roomSlots(roomId, value.date, attendees)
+    api.roomSlots(roomId, value.date, attendees, allowPast)
       .then((s) => { if (active) setSlots(s); })
       .catch(() => { if (active) setSlots([]); })
       .finally(() => { if (active) setLoadingSlots(false); });
     return () => { active = false; };
-  }, [roomId, attendees, value.date]);
+  }, [roomId, attendees, value.date, allowPast]);
 
   const cells = useMemo(() => {
     const first = new Date(month.getFullYear(), month.getMonth(), 1);

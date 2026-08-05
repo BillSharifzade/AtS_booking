@@ -12,11 +12,12 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models import Booking, BookingStatus, Room
+from app.config import settings
+from app.models import Booking, BookingStatus, Feedback, Room
 
 # Russian labels for the English enum (mirrors the frontend STATUS_LABELS).
 RU_OUTCOME: dict[str, str] = {
@@ -70,7 +71,7 @@ _COLUMNS: list[tuple[str, int, Alignment]] = [
     ("Название", 28, _WRAP_TOP),
     ("Описание", 38, _WRAP_TOP),
     ("Цель", 30, _WRAP_TOP),
-    ("Грейд", 20, _WRAP_TOP),
+    ("Грейд заявителя", 20, _WRAP_TOP),
     ("Должность заявителя", 22, _WRAP_TOP),
     ("Тренер", 20, _WRAP_TOP),
     ("Департамент", 22, _WRAP_TOP),
@@ -236,6 +237,31 @@ def period_bounds(date_from: date | None, date_to: date | None) -> list:
             Booking.starts_at < datetime.combine(date_to, time.min, tzinfo=timezone.utc) + timedelta(days=1)
         )
     return filters
+
+
+def _real_utc_midnight(day: date) -> datetime:
+    """Local midnight of ``day`` as a real UTC instant. Metadata columns like
+    ``Feedback.created_at`` come from the DB's ``now()`` (true UTC), unlike booking
+    times which are stored as local wall-clock labelled UTC."""
+    return datetime.combine(day, time.min, tzinfo=settings.app_tz).astimezone(timezone.utc)
+
+
+def review_period_bounds(date_from: date | None, date_to: date | None) -> list:
+    """SQL filter selecting the reviews that belong to a period.
+
+    A review counts when **either** the event took place in the period **or** the
+    review itself was left in it — a rating given today for last month's training is
+    what an admin looking at "7 дней" expects to see, and filtering on the event date
+    alone made freshly-left reviews look lost."""
+    by_event = period_bounds(date_from, date_to)
+    by_review = []
+    if date_from is not None:
+        by_review.append(Feedback.created_at >= _real_utc_midnight(date_from))
+    if date_to is not None:
+        by_review.append(Feedback.created_at < _real_utc_midnight(date_to + timedelta(days=1)))
+    if not by_event:
+        return []
+    return [or_(and_(*by_event), and_(*by_review))]
 
 
 async def build_bookings_workbook(

@@ -53,6 +53,7 @@ async def create_company(
         name=payload.name,
         website_url=payload.website_url,
         is_active=payload.is_active,
+        requires_department=payload.requires_department,
     )
     if payload.logo_data:
         company.logo_data = _decode_logo(payload.logo_data)
@@ -91,6 +92,8 @@ async def update_company(
         company.website_url = data["website_url"]
     if "is_active" in data and data["is_active"] is not None:
         company.is_active = data["is_active"]
+    if data.get("requires_department") is not None:
+        company.requires_department = data["requires_department"]
     if "logo_data" in data:
         if data["logo_data"]:
             company.logo_data = _decode_logo(data["logo_data"])

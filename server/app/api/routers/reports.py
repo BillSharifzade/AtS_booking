@@ -12,6 +12,7 @@ from app.db import get_session
 from app.models import Booking, BookingStatus, Company, Feedback, Room, Zone
 from app.schemas import (
     CompanyStat,
+    DashboardReview,
     DashboardSummary,
     RoomStat,
     TrendPoint,
@@ -20,7 +21,12 @@ from app.schemas import (
     ZoneStat,
 )
 from app.services.bookings import audit
-from app.services.reports import build_bookings_workbook, period_bounds, report_filename
+from app.services.reports import (
+    build_bookings_workbook,
+    period_bounds,
+    report_filename,
+    review_period_bounds,
+)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -101,6 +107,9 @@ async def summary(
     ).one()
 
     # Average ratings (overall + per aspect) + feedback count over the period.
+    # Reviews are matched on the event date OR the date the review was left, so one
+    # given today for an older event still shows up — see review_period_bounds().
+    rf = review_period_bounds(date_from, date_to)
     avg_rating, avg_room, avg_service, avg_props, feedback_count = (
         await session.execute(
             select(
@@ -112,9 +121,36 @@ async def summary(
             )
             .select_from(Feedback)
             .join(Booking, Feedback.booking_id == Booking.id)
-            .where(*f)
+            .where(*rf)
         )
     ).one()
+
+    # The reviews themselves (newest first), so the analytics page shows the texts and
+    # not just the averages.
+    review_rows = (
+        await session.execute(
+            select(Booking, Feedback)
+            .join(Feedback, Feedback.booking_id == Booking.id)
+            .options(selectinload(Booking.room))
+            .where(*rf)
+            .order_by(Feedback.created_at.desc())
+            .limit(20)
+        )
+    ).all()
+    reviews = [
+        DashboardReview(
+            booking_id=b.id,
+            event_name=b.event_name,
+            company=b.company,
+            room=b.room.name if b.room else "—",
+            rating=fb.rating,
+            comment=fb.comment,
+            suggestion=fb.suggestion,
+            created_at=fb.created_at,
+            starts_at=b.starts_at,
+        )
+        for b, fb in review_rows
+    ]
 
     # Average lead time (booking made → event start), in hours.
     avg_lead = (
@@ -305,4 +341,5 @@ async def summary(
         trend_bucket=trend_bucket,
         trend=trend,
         by_weekday=by_weekday,
+        reviews=reviews,
     )

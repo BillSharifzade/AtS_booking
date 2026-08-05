@@ -27,7 +27,8 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 export type RoomStruct = "theatre" | "class" | "banquet" | "u_shaped" | "conference";
 export type Status = "new" | "processing" | "approved" | "rejected" | "completed" | "archived";
 
-export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; has_logo: boolean };
+// `requires_department`: the booking form asks this company for a департамент/отдел.
+export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; requires_department: boolean; has_logo: boolean };
 // A bookable room (zones are admin-only and never exposed to clients). `photos` holds
 // RoomImage ids; build the URL via roomImageUrl(room.id, imageId).
 export type Room = { id: number; name: string; capacity: string; meter_squared: number | null; photos: number[] };

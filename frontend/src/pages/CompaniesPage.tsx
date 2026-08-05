@@ -17,6 +17,7 @@ type Form = {
   name: string;
   website_url: string;
   is_active: boolean;
+  requires_department: boolean;
   logo_content_type: string | null;
   logo_data: string | null; // base64 (no data: prefix)
   logo_preview: string | null; // data URL for preview, or existing logo URL
@@ -24,7 +25,7 @@ type Form = {
 };
 
 const EMPTY: Form = {
-  id: null, name: "", website_url: "", is_active: true,
+  id: null, name: "", website_url: "", is_active: true, requires_department: false,
   logo_content_type: null, logo_data: null, logo_preview: null, logo_cleared: false,
 };
 
@@ -42,6 +43,7 @@ export default function CompaniesPage() {
   const openNew = () => { setError(null); setEditing({ ...EMPTY }); };
   const openEdit = (c: Company) => setEditing({
     id: c.id, name: c.name, website_url: c.website_url ?? "", is_active: c.is_active,
+    requires_department: c.requires_department,
     logo_content_type: null, logo_data: null,
     logo_preview: c.has_logo ? companyLogoUrl(c.id) : null, logo_cleared: false,
   });
@@ -65,6 +67,7 @@ export default function CompaniesPage() {
           name: editing.name.trim(),
           website_url: editing.website_url.trim() || null,
           is_active: editing.is_active,
+          requires_department: editing.requires_department,
           logo_content_type: editing.logo_content_type,
           logo_data: editing.logo_data,
         });
@@ -73,6 +76,7 @@ export default function CompaniesPage() {
           name: editing.name.trim(),
           website_url: editing.website_url.trim() || null,
           is_active: editing.is_active,
+          requires_department: editing.requires_department,
         };
         if (editing.logo_data) { patch.logo_content_type = editing.logo_content_type; patch.logo_data = editing.logo_data; }
         else if (editing.logo_cleared) { patch.logo_data = ""; }
@@ -121,6 +125,7 @@ export default function CompaniesPage() {
               </div>
               <div className="ec-meta">
                 <span className={`badge ${c.is_active ? "active" : "inactive"}`}>{c.is_active ? "активна" : "скрыта"}</span>
+                {c.requires_department && <span className="badge zone" title="В заявке спрашивается департамент/отдел">департамент</span>}
                 {c.website_url && <a href={externalUrl(c.website_url)} target="_blank" rel="noreferrer noopener">сайт ↗</a>}
               </div>
             </div>
@@ -156,6 +161,15 @@ export default function CompaniesPage() {
                 <label><input type="checkbox" style={{ width: "auto", marginRight: 8 }}
                   checked={editing.is_active} onChange={(e) => setEditing({ ...editing, is_active: e.target.checked })} />
                   Активна (доступна клиентам при бронировании)</label>
+              </div>
+              <div className="field">
+                <label><input type="checkbox" style={{ width: "auto", marginRight: 8 }}
+                  checked={editing.requires_department}
+                  onChange={(e) => setEditing({ ...editing, requires_department: e.target.checked })} />
+                  Спрашивать департамент / отдел</label>
+                <span className="field-hint">
+                  Поле «Департамент / Отдел» появится в заявке только у этой компании (например, КОИНОТИ НАВ).
+                </span>
               </div>
             </div>
             <div className="modal-foot">

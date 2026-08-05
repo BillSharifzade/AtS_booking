@@ -233,6 +233,28 @@ export type DashboardSummary = {
   trend_bucket: "day" | "month";
   trend: TrendPoint[];
   by_weekday: WeekdayStat[];
+  reviews: DashboardReview[];
+};
+
+/** A review inside the analytics period (event date OR review date in range). */
+export type DashboardReview = {
+  booking_id: number;
+  event_name: string;
+  company: string;
+  room: string;
+  rating: number;
+  comment: string | null;
+  suggestion: string | null;
+  created_at: string;
+  starts_at: string;
+};
+
+/** What administrators receive in Telegram (Настройки → Уведомления). */
+export type NotifyPrefs = {
+  new_bookings: boolean;
+  urgent_only: boolean;
+  status_changes: boolean;
+  chat_messages: boolean;
 };
 
 export type TrendPoint = { key: string; label: string; count: number; hours: number };
@@ -281,6 +303,8 @@ export type NewBooking = {
   coffee_other?: string | null;
   foreign_guests?: boolean;
   is_urgent: boolean;
+  /** Register an event that already happened — past slots + no client notifications. */
+  allow_past?: boolean;
   starts_at: string;
   ends_at: string;
   props?: { prop_id: number; amount: number }[];
@@ -291,6 +315,8 @@ export type Company = {
   name: string;
   website_url: string | null;
   is_active: boolean;
+  /** Ask this company's requesters for their департамент/отдел. */
+  requires_department: boolean;
   has_logo: boolean;
   created_at: string;
 };
@@ -414,10 +440,15 @@ export const api = {
   zoneImages: (id: number) => request<ZoneImage[]>(`/zones/${id}/images`),
 
   listRooms: () => request<Room[]>("/rooms"),
-  roomDays: (id: number, from: string, to: string, attendees: number) =>
-    request<ZoneDay[]>(`/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
-  roomSlots: (id: number, on: string, attendees: number) =>
-    request<ZoneSlot[]>(`/rooms/${id}/slots?on=${on}&attendees=${attendees}`),
+  // includePast: keep past days/times selectable when registering an event after the fact.
+  roomDays: (id: number, from: string, to: string, attendees: number, includePast = false) =>
+    request<ZoneDay[]>(
+      `/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}${includePast ? "&include_past=true" : ""}`,
+    ),
+  roomSlots: (id: number, on: string, attendees: number, includePast = false) =>
+    request<ZoneSlot[]>(
+      `/rooms/${id}/slots?on=${on}&attendees=${attendees}${includePast ? "&include_past=true" : ""}`,
+    ),
   createRoom: (data: Partial<Room>) =>
     request<Room>("/rooms", { method: "POST", body: JSON.stringify(data) }),
   updateRoom: (id: number, data: Partial<Room>) =>
@@ -463,7 +494,7 @@ export const api = {
   // ---- Companies (#4) ----
   listCompanies: (activeOnly = false) =>
     request<Company[]>(`/companies${activeOnly ? "?active_only=true" : ""}`),
-  createCompany: (data: { name: string; website_url?: string | null; is_active?: boolean; logo_content_type?: string | null; logo_data?: string | null }) =>
+  createCompany: (data: { name: string; website_url?: string | null; is_active?: boolean; requires_department?: boolean; logo_content_type?: string | null; logo_data?: string | null }) =>
     request<Company>("/companies", { method: "POST", body: JSON.stringify(data) }),
   updateCompany: (id: number, data: Record<string, unknown>) =>
     request<Company>(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -537,6 +568,10 @@ export const api = {
 
   notifications: (afterChatId = 0) =>
     request<NotificationsSummary>(`/notifications?after_chat_id=${afterChatId}`),
+
+  getNotifyPrefs: () => request<NotifyPrefs>("/notifications/settings"),
+  updateNotifyPrefs: (data: NotifyPrefs) =>
+    request<NotifyPrefs>("/notifications/settings", { method: "PUT", body: JSON.stringify(data) }),
 
   getChat: (telegramId: number, after = 0) =>
     request<ChatMessage[]>(`/chat/${telegramId}?after=${after}`),

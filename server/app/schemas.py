@@ -100,14 +100,15 @@ class RoomOut(BaseModel):
 # dynamic layout builder can add custom keys without a schema change.
 ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped", "conference"}
 
-# Requester grade ("Грейд") — a fixed dropdown. Order defines how the UIs list it.
+# Requester grade ("Грейд заявителя") — a fixed dropdown. Order defines how the UIs
+# list it. «Руководитель отдела»/«Руководитель департамента» were merged into one
+# «Руководитель структурного подразделения» entry (migration 0019 rewrote old rows).
 GRADES = [
     "Стажер",
     "Специалист",
     "Ведущий специалист",
     "Главный специалист",
-    "Руководитель отдела",
-    "Руководитель департамента",
+    "Руководитель структурного подразделения",
 ]
 
 # Event formats ("Тип мероприятия") — a fixed dropdown. Order defines how the UIs list it.
@@ -156,6 +157,10 @@ class BookingCreate(BaseModel):
     foreign_guests: bool = False
     is_urgent: bool = False
     privacy_accepted: bool = False
+    # Admin-only: register an event that has already happened ("задним числом").
+    # Past slots are otherwise rejected, and a backdated booking sends no
+    # "ожидайте подтверждения" notifications.
+    allow_past: bool = False
     starts_at: datetime
     ends_at: datetime
     props: list[PropRequest] = []
@@ -403,6 +408,19 @@ class NotificationsOut(BaseModel):
     unread_by_user: dict[str, int]
 
 
+class NotifyPrefs(BaseModel):
+    """What administrators get in Telegram. Defaults = «только новые и срочные»:
+    every new request, nothing on routine status changes."""
+    # DM every admin when a request is created.
+    new_bookings: bool = True
+    # …but only when it is urgent (срочная / <2 дней).
+    urgent_only: bool = False
+    # DM every admin on approve / reject / complete / archive.
+    status_changes: bool = False
+    # Relay customer chat messages (bot ↔ admin) to admins' Telegram.
+    chat_messages: bool = True
+
+
 class ZoneStat(BaseModel):
     zone: str
     count: int
@@ -451,6 +469,22 @@ class WeekdayStat(BaseModel):
     hours: float
 
 
+class DashboardReview(BaseModel):
+    """A review as the analytics page lists it (so a freshly left отзыв is visible
+    there, not only as an average)."""
+    booking_id: int
+    event_name: str
+    company: str
+    room: str
+    rating: int
+    comment: str | None = None
+    suggestion: str | None = None
+    created_at: datetime
+    # Event date of the reviewed booking — the period filter matches either this or
+    # the review's own date, whichever falls inside the selected range.
+    starts_at: datetime
+
+
 class DashboardSummary(BaseModel):
     date_from: date | None
     date_to: date | None
@@ -483,6 +517,8 @@ class DashboardSummary(BaseModel):
     trend_bucket: str = "day"
     trend: list[TrendPoint] = []
     by_weekday: list[WeekdayStat] = []
+    # Reviews left in the period (newest first) — the texts behind avg_rating.
+    reviews: list[DashboardReview] = []
 
 
 # ----- Companies (#4) -----
@@ -490,6 +526,8 @@ class CompanyCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     website_url: str | None = Field(default=None, max_length=300)
     is_active: bool = True
+    # Ask this company's requesters for their department/отдел (was: name-based rule).
+    requires_department: bool = False
     # Optional inline logo (base64), picked via the image picker.
     logo_content_type: str | None = Field(default=None, pattern=r"^image/(png|jpeg|jpg|webp|gif|svg\+xml)$")
     logo_data: str | None = None  # base64
@@ -499,6 +537,7 @@ class CompanyUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
     website_url: str | None = Field(default=None, max_length=300)
     is_active: bool | None = None
+    requires_department: bool | None = None
     logo_content_type: str | None = Field(default=None, pattern=r"^image/(png|jpeg|jpg|webp|gif|svg\+xml)$")
     logo_data: str | None = None  # base64; pass "" to clear
 
@@ -509,6 +548,7 @@ class CompanyOut(BaseModel):
     name: str
     website_url: str | None
     is_active: bool
+    requires_department: bool = False
     has_logo: bool
     created_at: datetime
 

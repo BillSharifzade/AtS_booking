@@ -107,10 +107,11 @@ def _free_intervals(open_dt: datetime, close_dt: datetime, busy: list[Interval])
 
 
 def _day_starts(
-    rooms: list[Room], day: date, busy_by_room: dict[int, list[Interval]], now: datetime
+    rooms: list[Room], day: date, busy_by_room: dict[int, list[Interval]], now: datetime | None
 ) -> list[tuple[time, time]]:
     """Free start times (30-min grid) for the zone on ``day``, each with the latest
-    end reachable within a single room's free interval. Past times are excluded.
+    end reachable within a single room's free interval. Times before ``now`` are
+    excluded (pass ``now=None`` to keep them — admins may register a past event).
     Sundays are never bookable, and the window is clamped to the business hours."""
     # No bookings on Sundays.
     if day.weekday() == 6:
@@ -136,7 +137,7 @@ def _day_starts(
     starts: list[tuple[time, time]] = []
     cur = overall_open
     while cur + MIN_DURATION <= overall_close:
-        if cur >= now:
+        if now is None or cur >= now:
             max_end: datetime | None = None
             for a, b in intervals:
                 if a <= cur < b:
@@ -198,19 +199,26 @@ async def _bookable_room(session: AsyncSession, room_id: int, attendees: int) ->
 
 
 async def room_day_slots(
-    session: AsyncSession, room_id: int, day: date, attendees: int
+    session: AsyncSession, room_id: int, day: date, attendees: int, include_past: bool = False
 ) -> list[tuple[time, time]]:
     room = await _bookable_room(session, room_id, attendees)
     if room is None:
         return []
     day_start = _combine(day, time(0, 0))
     busy = await _busy_by_room(session, [room.id], day_start, day_start + timedelta(days=1))
-    return _day_starts([room], day, busy, local_now())
+    return _day_starts([room], day, busy, None if include_past else local_now())
 
 
 async def room_available_days(
-    session: AsyncSession, room_id: int, day_from: date, day_to: date, attendees: int
+    session: AsyncSession,
+    room_id: int,
+    day_from: date,
+    day_to: date,
+    attendees: int,
+    include_past: bool = False,
 ) -> dict[date, bool]:
+    """Which days have a free slot. ``include_past`` keeps past days/times selectable —
+    used only by the panel, so an admin can register an event after the fact."""
     room = await _bookable_room(session, room_id, attendees)
     today = local_now().date()
     if room is None:
@@ -218,8 +226,9 @@ async def room_available_days(
     range_start = _combine(day_from, time(0, 0))
     range_end = _combine(day_to, time(0, 0)) + timedelta(days=1)
     busy = await _busy_by_room(session, [room.id], range_start, range_end)
-    now = local_now()
+    now = None if include_past else local_now()
     out: dict[date, bool] = {}
     for d in _daterange(day_from, day_to):
-        out[d] = False if d < today else bool(_day_starts([room], d, busy, now))
+        past_day = d < today and not include_past
+        out[d] = False if past_day else bool(_day_starts([room], d, busy, now))
     return out

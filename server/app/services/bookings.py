@@ -15,6 +15,7 @@ from app.models import (
     BookingProp,
     BookingStatus,
     ChecklistTemplateItem,
+    Company,
     Prop,
     RoomOfftime,
     Room,
@@ -62,8 +63,24 @@ _KOINOTI_RE = re.compile(r"ко[ий]?ноти\s*нав|koinoti\s*nav", re.IGNOR
 
 
 def is_koinoti(company: str | None) -> bool:
-    """Whether a company label refers to КОИНОТИ НАВ (department is required for it)."""
+    """Whether a free-text company label looks like КОИНОТИ НАВ. Only a *fallback*:
+    for companies picked from the directory the explicit
+    ``Company.requires_department`` flag decides (see :func:`needs_department`)."""
     return bool(company and _KOINOTI_RE.search(company))
+
+
+async def needs_department(
+    session: AsyncSession, *, company_id: int | None, company: str | None
+) -> bool:
+    """Whether this booking must state the requester's департамент/отдел.
+
+    Admins own the rule per company (Companies → «Спрашивать департамент»); the name
+    heuristic is used only when the customer typed a company that isn't in the directory."""
+    if company_id is not None:
+        row = await session.get(Company, company_id)
+        if row is not None:
+            return bool(row.requires_department)
+    return is_koinoti(company)
 
 
 def capacity_number(text: str | None) -> int | None:
@@ -94,14 +111,14 @@ def _capacity_sort_key(room: Room) -> tuple[bool, int, str]:
 # layout builder can extend it. Mirrors schemas.ROOM_STRUCTS.
 ROOM_STRUCTS = {"theatre", "class", "banquet", "u_shaped", "conference"}
 
-# Valid requester grades ("Грейд"). Mirrors schemas.GRADES.
+# Valid requester grades ("Грейд заявителя"). Mirrors schemas.GRADES — the two
+# «Руководитель отдела/департамента» entries were merged into one (migration 0019).
 GRADES = {
     "Стажер",
     "Специалист",
     "Ведущий специалист",
     "Главный специалист",
-    "Руководитель отдела",
-    "Руководитель департамента",
+    "Руководитель структурного подразделения",
 }
 
 # What can be served at a coffee break. Mirrors schemas.COFFEE_TYPES.
@@ -237,11 +254,19 @@ def validate_window(room: Room, starts_at: datetime, ends_at: datetime) -> None:
         )
 
 
+def _as_utc(dt: datetime) -> datetime:
+    """Stored datetimes are naive local wall-clock labelled UTC — normalise so they can
+    be compared with ``local_now()``."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
 def is_urgent(starts_at: datetime) -> bool:
-    now = local_now()
-    if starts_at.tzinfo is None:
-        starts_at = starts_at.replace(tzinfo=timezone.utc)
-    return (starts_at - now) < URGENT_THRESHOLD
+    return (_as_utc(starts_at) - local_now()) < URGENT_THRESHOLD
+
+
+def is_past(starts_at: datetime) -> bool:
+    """Whether a slot has already started (business time)."""
+    return _as_utc(starts_at) < local_now()
 
 
 async def suggest_alternatives(
@@ -343,9 +368,15 @@ async def create_booking(
     department: str | None = None,
     target_employees: str | None = None,
     privacy_accepted: bool = False,
+    allow_past: bool = False,
     props: list[tuple[int, int]] | None = None,
 ) -> Booking:
     validate_window(room, starts_at, ends_at)
+    # Registering an event after it happened is an admin-only action (`allow_past`);
+    # customers booking through the bot / mini app can only pick future slots.
+    in_past = is_past(starts_at)
+    if in_past and not allow_past:
+        raise BookingError("Эта дата уже прошла. Выберите другое время.")
     if not room_fits(room, attendees):
         alts = await rooms_with_capacity(session, attendees, starts_at, ends_at, exclude_id=room.id)
         head = f"Вместимость «{room.name}» — {room.capacity}, а участников {attendees}."
@@ -381,15 +412,19 @@ async def create_booking(
     position_val = (position or "").strip() or None
     trainer_val = (trainer or "").strip() or None
     target_employees_val = (target_employees or "").strip() or None
-    # КОИНОТИ НАВ events must specify the participant's department/отдел.
+    # Only companies flagged for it (КОИНОТИ НАВ by default) must state the
+    # participant's department/отдел.
     department_val = (department or "").strip() or None
-    if is_koinoti(company) and department_val is None:
-        raise BookingError("Для мероприятий КОИНОТИ НАВ укажите департамент/отдел.")
+    if department_val is None and await needs_department(
+        session, company_id=company_id, company=company
+    ):
+        raise BookingError("Для мероприятий этой компании укажите департамент/отдел.")
     # Validate prop stock up-front so we don't create a booking we can't fulfil.
     # Stock is per event day — see props_committed().
     resolved_props = await validate_props(session, props or [], day=starts_at.date())
 
     # Spec rule: bookings <2 days out are always urgent; the user can also opt in.
+    # A backdated record is never "urgent" — there is nothing left to hurry for.
     booking = Booking(
         room_id=room.id,
         company=company,
@@ -419,7 +454,7 @@ async def create_booking(
         starts_at=starts_at,
         ends_at=ends_at,
         status=BookingStatus.new,
-        is_urgent=urgent or is_urgent(starts_at),
+        is_urgent=False if in_past else (urgent or is_urgent(starts_at)),
     )
     session.add(booking)
     await session.flush()

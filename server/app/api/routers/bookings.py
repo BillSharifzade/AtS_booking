@@ -209,9 +209,12 @@ async def create_booking_endpoint(
             department=payload.department,
             target_employees=payload.target_employees,
             privacy_accepted=payload.privacy_accepted,
+            # Panel-only: register an event that already took place.
+            allow_past=payload.allow_past,
             props=[(p.prop_id, p.amount) for p in payload.props],
         )
-        await svc.audit(session, admin_id, "booking.create", "booking", booking.id, f"«{booking.event_name}», {room.name}")
+        detail = f"«{booking.event_name}», {room.name}" + (" (задним числом)" if payload.allow_past else "")
+        await svc.audit(session, admin_id, "booking.create", "booking", booking.id, detail)
         await session.commit()
     except svc.BookingError as exc:
         await session.rollback()

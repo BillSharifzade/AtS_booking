@@ -49,6 +49,10 @@ function fmtDateTime(s: string) {
   return new Date(s).toLocaleString("ru-RU", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
 }
 
+function fmtDate(s: string) {
+  return new Date(s).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", year: "2-digit", timeZone: "UTC" });
+}
+
 export default function DashboardPage() {
   const nav = useNavigate();
   const [preset, setPreset] = useState<Preset>("30d");
@@ -318,7 +322,10 @@ export default function DashboardPage() {
             </section>
 
             <section className="card">
-              <div className="card-head"><h3>Качество обслуживания</h3></div>
+              <div className="card-head">
+                <h3>Качество обслуживания</h3>
+                <span className="chart-note">по дате мероприятия или отзыва</span>
+              </div>
               {data.feedback_count === 0 ? (
                 <div className="dash-empty">Отзывов за период нет.</div>
               ) : (
@@ -334,6 +341,43 @@ export default function DashboardPage() {
                   ))}
                   <div className="k" style={{ color: "var(--muted-2)" }}>Отзывов</div>
                   <div style={{ color: "var(--muted)" }}>{ru(data.feedback_count)}</div>
+                </div>
+              )}
+            </section>
+
+            {/* The reviews themselves — averages alone made a freshly left отзыв look
+                missing, and it may belong to an event outside the selected period. */}
+            <section className="card">
+              <div className="card-head">
+                <h3>Отзывы за период</h3>
+                <span className="chart-note">{data.reviews.length > 0 ? `${ru(data.feedback_count)} всего` : ""}</span>
+              </div>
+              {data.reviews.length === 0 ? (
+                <div className="dash-empty">Отзывов за период нет.</div>
+              ) : (
+                <div className="up-list">
+                  {data.reviews.map((r) => (
+                    <button className="up-item" key={r.booking_id} onClick={() => nav(`/bookings/${r.booking_id}`)}>
+                      <div className="up-when">{fmtDate(r.created_at)}</div>
+                      <div className="up-main">
+                        <div className="up-title">
+                          {r.event_name}
+                          <Stars value={r.rating} showNum={false} />
+                        </div>
+                        <div className="up-meta">
+                          {r.company} · {r.room} · мероприятие {fmtDate(r.starts_at)}
+                        </div>
+                        {(r.comment || r.suggestion) && (
+                          <div className="up-meta">
+                            {r.comment && <>«{r.comment}»</>}
+                            {r.comment && r.suggestion && " · "}
+                            {r.suggestion && <>предложения: {r.suggestion}</>}
+                          </div>
+                        )}
+                      </div>
+                      <span className="up-arrow">→</span>
+                    </button>
+                  ))}
                 </div>
               )}
             </section>

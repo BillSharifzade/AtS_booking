@@ -137,7 +137,7 @@ export default function BookingDetailPage() {
             <div className="k">Тип</div><div>{b.event_type}</div>
             <div className="k">Описание</div><div>{b.description || "—"}</div>
             <div className="k">Цель бронирования</div><div>{b.aim || "—"}</div>
-            <div className="k">Грейд</div><div>{b.grade || "—"}</div>
+            <div className="k">Грейд заявителя</div><div>{b.grade || "—"}</div>
             <div className="k">Должность заявителя</div><div>{b.position || "—"}</div>
             <div className="k">Тренер</div>
             <div>{admin ? <TrainerEditor booking={b} onSaved={load} /> : (b.trainer || "—")}</div>

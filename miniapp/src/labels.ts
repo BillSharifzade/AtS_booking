@@ -16,14 +16,14 @@ export const ROOM_STRUCT_HINTS: Record<RoomStruct, string> = {
 };
 export const ROOM_STRUCT_ORDER: RoomStruct[] = ["theatre", "class", "banquet", "u_shaped", "conference"];
 
-// Requester grade ("Грейд", #1) — fixed dropdown, order mirrors the backend GRADES.
+// Requester grade ("Грейд заявителя", #1) — fixed dropdown, order mirrors the backend
+// GRADES. «Руководитель отдела»/«департамента» are merged into one entry.
 export const GRADES = [
   "Стажер",
   "Специалист",
   "Ведущий специалист",
   "Главный специалист",
-  "Руководитель отдела",
-  "Руководитель департамента",
+  "Руководитель структурного подразделения",
 ];
 
 // Event formats ("Тип мероприятия") — fixed dropdown, mirrors backend EVENT_TYPES.
@@ -36,9 +36,15 @@ export const EVENT_TYPES = [
   "Мастер-класс",
 ];
 
-// КОИНОТИ НАВ events require the participant's department/отдел to be specified.
+// Whether the form must ask for the participant's департамент/отдел. Admins decide it
+// per company (Company.requires_department); the name check is only a fallback for a
+// company typed by hand, and mirrors the backend `is_koinoti`.
 const KOINOTI_RE = /ко[ий]?ноти\s*нав|koinoti\s*nav/i;
 export const isKoinoti = (company: string): boolean => KOINOTI_RE.test(company || "");
+export const needsDepartment = (
+  company: { requires_department?: boolean } | null | undefined,
+  companyName: string,
+): boolean => (company ? !!company.requires_department : isKoinoti(companyName));
 
 // Capacity is free text (e.g. «До 10 человек», «10-12», «много»). Mirror the backend
 // capacity_number()/room_fits(): use the LARGEST number in the label; an unparseable

@@ -29,9 +29,10 @@ from app.db import SessionLocal
 from app.models import Booking, BookingProp, ChatMessage, Company, Feedback, Prop, Room, RoomImage
 from app.services import availability as avail
 from app.services import bookings as svc
-from app.services.bookings import GRADES, ROOM_STRUCTS, is_koinoti
+from app.services.bookings import GRADES, ROOM_STRUCTS, needs_department
 from app.schemas import EVENT_TYPES, GRADES as GRADE_ORDER
 from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
+from app.services.notify_prefs import current_prefs
 from app.services.ratelimit import allow
 from app.services.reports import build_bookings_workbook, report_filename
 from app.services.users import upsert_user
@@ -218,6 +219,10 @@ async def _relay_to_admins(msg: Message) -> None:
             username=msg.from_user.username,
         )
         await session.commit()
+    # The message is stored either way (it shows up in the panel's chat); the Telegram
+    # ping to admins is opt-out in «Настройки → Уведомления».
+    if not (await current_prefs()).chat_messages:
+        return
     who = msg.from_user.full_name or (f"@{msg.from_user.username}" if msg.from_user.username else f"ID {msg.from_user.id}")
     for admin_id in settings.admin_telegram_ids:
         await send_text(admin_id, f"Сообщение от {esc(who)}: {esc(text)}\nОтветить можно в админ-панели.")
@@ -624,8 +629,13 @@ async def get_grade(msg: Message, state: FSMContext) -> None:
 async def get_target_employees(msg: Message, state: FSMContext) -> None:
     await state.update_data(target_employees=msg.text.strip())
     data = await state.get_data()
-    # КОИНОТИ НАВ events additionally require the participant's department/отдел.
-    if is_koinoti(data.get("company")):
+    # Only companies flagged «Спрашивать департамент» (КОИНОТИ НАВ by default) ask for
+    # the participant's department/отдел.
+    async with SessionLocal() as session:
+        ask_department = await needs_department(
+            session, company_id=data.get("company_id"), company=data.get("company")
+        )
+    if ask_department:
         await state.set_state(Booking_FSM.department)
         await msg.answer(t.ENTER_DEPARTMENT)
     else:
@@ -920,7 +930,7 @@ async def _show_confirm(msg: Message, state: FSMContext) -> None:
         f"Название: {esc(data['event_name'])}\n"
         f"Описание: {esc(data.get('description')) or '—'}\n"
         f"Цель: {esc(data.get('aim')) or '—'}\n"
-        f"Грейд: {esc(data.get('grade')) or '—'}\n"
+        f"Грейд заявителя: {esc(data.get('grade')) or '—'}\n"
         f"Должность заявителя: {esc(data.get('position')) or '—'}\n"
         + (f"Департамент: {esc(data['department'])}\n" if data.get("department") else "")
         + f"Для сотрудников: {esc(data.get('target_employees')) or '—'}\n"
@@ -1167,7 +1177,7 @@ async def my(msg: Message) -> None:
         )
         extra: list[str] = []
         if b.grade:
-            extra.append(f"  грейд: {esc(b.grade)}")
+            extra.append(f"  грейд заявителя: {esc(b.grade)}")
         if b.position:
             extra.append(f"  должность: {esc(b.position)}")
         if b.trainer:

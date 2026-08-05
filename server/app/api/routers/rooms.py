@@ -56,6 +56,7 @@ async def room_days(
     date_from: date = Query(...),
     date_to: date = Query(...),
     attendees: int = Query(1, ge=1),
+    include_past: bool = Query(False, description="Keep past days selectable (backdated entry)"),
     _: tuple[int, str] = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ZoneDayOut]:
@@ -63,7 +64,9 @@ async def room_days(
         raise HTTPException(400, "date_to before date_from")
     if (date_to - date_from).days > MAX_DAY_RANGE:
         date_to = date_from + timedelta(days=MAX_DAY_RANGE)
-    days = await avail.room_available_days(session, room_id, date_from, date_to, attendees)
+    days = await avail.room_available_days(
+        session, room_id, date_from, date_to, attendees, include_past
+    )
     return [ZoneDayOut(date=d, available=a) for d, a in sorted(days.items())]
 
 
@@ -72,10 +75,11 @@ async def room_slots(
     room_id: int,
     on: date = Query(...),
     attendees: int = Query(1, ge=1),
+    include_past: bool = Query(False, description="Keep past times selectable (backdated entry)"),
     _: tuple[int, str] = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> list[ZoneSlotOut]:
-    slots = await avail.room_day_slots(session, room_id, on, attendees)
+    slots = await avail.room_day_slots(session, room_id, on, attendees, include_past)
     return [ZoneSlotOut(start=s, end=e) for s, e in slots]
 
 

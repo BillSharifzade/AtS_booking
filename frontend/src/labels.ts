@@ -19,9 +19,15 @@ export const EVENT_TYPES = [
   "Мастер-класс",
 ];
 
-// КОИНОТИ НАВ events require the participant's department/отдел to be specified.
+// Whether a booking must state the requester's департамент/отдел. Admins set this per
+// company (Компании → «Спрашивать департамент»); the name check below is only a
+// fallback for a company typed by hand, and mirrors the backend `is_koinoti`.
 const KOINOTI_RE = /ко[ий]?ноти\s*нав|koinoti\s*nav/i;
 export const isKoinoti = (company: string): boolean => KOINOTI_RE.test(company || "");
+export const needsDepartment = (
+  company: { requires_department?: boolean } | null | undefined,
+  companyName: string,
+): boolean => (company ? !!company.requires_department : isKoinoti(companyName));
 
 export const COFFEE_STATUS_LABELS: Record<string, string> = {
   pending: "ожидает",
@@ -54,14 +60,14 @@ export const ROOM_STRUCT_HINTS: Record<string, string> = {
 };
 export const ROOM_STRUCT_ORDER = ["theatre", "class", "banquet", "u_shaped", "conference"];
 
-// Requester grade ("Грейд", #1) — fixed dropdown, order mirrors the backend GRADES.
+// Requester grade ("Грейд заявителя", #1) — fixed dropdown, order mirrors the backend
+// GRADES. The two «Руководитель отдела/департамента» entries are merged into one.
 export const GRADES = [
   "Стажер",
   "Специалист",
   "Ведущий специалист",
   "Главный специалист",
-  "Руководитель отдела",
-  "Руководитель департамента",
+  "Руководитель структурного подразделения",
 ];
 
 export const RESULT_OUTCOME_LABELS: Record<string, string> = {

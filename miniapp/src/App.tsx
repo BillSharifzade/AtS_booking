@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { EVENT_TYPES, GRADES, isKoinoti, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_DOC_LABEL, RULES_DOC_URL, RULES_INTRO_AFTER, RULES_INTRO_BEFORE, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { EVENT_TYPES, GRADES, needsDepartment, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_DOC_LABEL, RULES_DOC_URL, RULES_INTRO_AFTER, RULES_INTRO_BEFORE, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
@@ -161,6 +161,14 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   );
   const roomOverCapacity = !!(selectedRoom && attendeesNum > 0 && !roomFits(selectedRoom.capacity, attendeesNum));
 
+  // Департамент is asked only for companies the admins flagged for it (КОИНОТИ НАВ by
+  // default) — not for every company.
+  const selectedCompany = useMemo(
+    () => boot.companies.find((c) => c.id === form.company_id) ?? null,
+    [boot.companies, form.company_id],
+  );
+  const askDepartment = needsDepartment(selectedCompany, form.company);
+
   // Equipment stock is scoped to the event day, so availability is re-fetched whenever
   // the chosen date changes (the bootstrap list has no date and reports total stock).
   // Amounts already picked are clamped down if the new day has less free, so the user
@@ -206,13 +214,13 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       case 3: return true; // props optional
       case 4: return !!(form.event_name.trim() && form.event_type.trim() && form.aim.trim() && form.grade &&
         form.position.trim() && form.target_employees.trim() &&
-        (!isKoinoti(form.company) || form.department.trim()) &&
+        (!askDepartment || form.department.trim()) &&
         form.contact_name.trim() && form.phone.trim() &&
         (!form.coffee_break || (form.coffee_headcount && (form.coffee_type !== "other" || form.coffee_other.trim()))));
       case 5: return form.agree.every(Boolean); // must acknowledge every document
       default: return true;
     }
-  }, [step, form, attendeesNum, roomOverCapacity]);
+  }, [step, form, attendeesNum, roomOverCapacity, askDepartment]);
 
   const submit = async () => {
     setBusy(true); setErr(null);
@@ -232,7 +240,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       grade: form.grade || null,
       extra_services: form.extra_services.trim() || null,
       position: form.position.trim() || null,
-      department: isKoinoti(form.company) ? form.department.trim() || null : null,
+      department: askDepartment ? form.department.trim() || null : null,
       target_employees: form.target_employees.trim() || null,
       privacy_accepted: form.agree.every(Boolean),
       attendees: attendeesNum,
@@ -421,7 +429,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
           </div>
           <div className="grid2">
             <Field label="Цель бронирования"><input value={form.aim} onChange={(e) => set({ aim: e.target.value })} placeholder="напр. развитие навыков сотрудников" /></Field>
-            <Field label="Грейд">
+            <Field label="Грейд заявителя">
               <select value={form.grade} onChange={(e) => set({ grade: e.target.value })}>
                 <option value="">— выберите грейд —</option>
                 {GRADES.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -429,7 +437,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
             </Field>
           </div>
           <Field label="Должность заявителя"><input value={form.position} onChange={(e) => set({ position: e.target.value })} placeholder="напр. HR-менеджер" /></Field>
-          {isKoinoti(form.company) && (
+          {askDepartment && (
             <Field label="Департамент / Отдел">
               <input value={form.department} onChange={(e) => set({ department: e.target.value })} placeholder="напр. Департамент цифровизации" />
             </Field>
@@ -630,7 +638,7 @@ function BookingDetail({ booking: b, onClose, onFeedback }: { booking: ClientBoo
           <DetailRow label="Участников" value={`${b.attendees} чел.`} />
           {b.event_type && <DetailRow label="Тип" value={b.event_type} />}
           {b.aim && <DetailRow label="Цель" value={b.aim} />}
-          {b.grade && <DetailRow label="Грейд" value={b.grade} />}
+          {b.grade && <DetailRow label="Грейд заявителя" value={b.grade} />}
           {b.position && <DetailRow label="Должность заявителя" value={b.position} />}
           {b.department && <DetailRow label="Департамент" value={b.department} />}
           {b.target_employees && <DetailRow label="Для сотрудников" value={b.target_employees} />}

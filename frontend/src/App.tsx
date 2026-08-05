@@ -18,6 +18,7 @@ import OfftimesPage from "./pages/OfftimesPage";
 import KnowledgePage from "./pages/KnowledgePage";
 import ReviewsPage from "./pages/ReviewsPage";
 import LandingPage from "./pages/LandingPage";
+import NotifySettingsPage from "./pages/NotifySettingsPage";
 
 function RequireAuth({ children }: { children: JSX.Element }) {
   const loc = useLocation();
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="checklist" element={<RequireAdmin><ChecklistPage /></RequireAdmin>} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="bot-texts" element={<BotTextsPage />} />
+        <Route path="notify-settings" element={<NotifySettingsPage />} />
         <Route path="users" element={<RequireAdmin><UsersPage /></RequireAdmin>} />
       </Route>
     </Routes>

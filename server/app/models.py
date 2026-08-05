@@ -343,6 +343,10 @@ class Company(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False, unique=True)
     website_url: Mapped[str | None] = mapped_column(String(300))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Ask the requester for their department/отдел when booking for this company.
+    # Historically this was inferred from the name (КОИНОТИ НАВ); it is now an explicit
+    # per-company switch so admins control exactly where the field shows up.
+    requires_department: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     logo_content_type: Mapped[str | None] = mapped_column(String(60))
     logo_data: Mapped[bytes | None] = mapped_column(LargeBinary)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
