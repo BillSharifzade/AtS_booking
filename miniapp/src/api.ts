@@ -161,9 +161,14 @@ export const api = {
   landing: () => request<LandingContent>("/site/landing"),
   events: () => request<CalendarEvent[]>("/site/events"),
   monthCalendar: () => request<MonthCalendar>("/site/month-calendar"),
-  // Equipment stock is scoped to the event day, so availability is re-fetched once
-  // the date is known instead of reusing the (date-less) bootstrap counts.
-  propsOn: (on: string) => request<Prop[]>(`/client/props?on=${on}`),
+  // Equipment is held only for the HOURS of an event, so availability is re-fetched
+  // once the slot is known instead of reusing the (slot-less) bootstrap counts.
+  // Without start/end the server answers with the worst case over the whole day.
+  propsOn: (on: string, start?: string, end?: string) => {
+    const qs = new URLSearchParams({ on });
+    if (start && end) { qs.set("start", start); qs.set("end", end); }
+    return request<Prop[]>(`/client/props?${qs.toString()}`);
+  },
   roomDays: (id: number, from: string, to: string, attendees: number) =>
     request<ZoneDay[]>(`/client/rooms/${id}/days?date_from=${from}&date_to=${to}&attendees=${attendees}`),
   roomSlots: (id: number, on: string, attendees: number) =>

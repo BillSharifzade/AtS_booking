@@ -144,34 +144,41 @@ async def has_offtime(
     return (await session.execute(stmt)).scalars().first()
 
 
+def combine_local(day: date, moment: time) -> datetime:
+    """Build a booking-comparable datetime from a day + wall-clock time. Booking times
+    are stored as naive local wall-clock labelled UTC (see the timezone convention), so
+    everything compared against starts_at/ends_at is built the same way."""
+    return datetime.combine(day, moment, tzinfo=timezone.utc)
+
+
 def day_bounds(day: date) -> tuple[datetime, datetime]:
-    """Half-open [00:00, next-day 00:00) window for a booking day. Booking times are
-    stored as naive local wall-clock labelled UTC (see the timezone convention), so the
-    bounds are built the same way and compare directly against starts_at."""
-    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    """Half-open [00:00, next-day 00:00) window for a booking day."""
+    start = combine_local(day, time.min)
     return start, start + timedelta(days=1)
 
 
 async def props_committed(
     session: AsyncSession,
-    day: date,
+    starts_at: datetime,
+    ends_at: datetime,
     *,
     exclude_booking_id: int | None = None,
 ) -> dict[int, int]:
-    """How much of each prop is already held on `day`, as {prop_id: amount}.
+    """How much of each prop is held by active bookings OVERLAPPING the window
+    [starts_at, ends_at), as {prop_id: amount}.
 
-    Equipment is handed out and returned per event day, so stock is scoped to the
-    calendar day of the booking. Previously this summed EVERY active booking with no
-    time bound, which meant a single clicker used once stayed "in use" forever and
-    blocked every future request for it."""
-    day_start, day_end = day_bounds(day)
+    Equipment is tied to the HOURS of an event, not to the whole day: a projector taken
+    for a 08:30–12:00 training is handed back at 12:00 and is free for a 14:00 event on
+    the same day. Only bookings whose own window actually intersects the requested one
+    count against stock — a booking that merely shares the calendar day does not.
+    Touching ends (one event finishes exactly when the next starts) do not overlap."""
     stmt = (
         select(BookingProp.prop_id, func.coalesce(func.sum(BookingProp.amount), 0))
         .join(Booking, Booking.id == BookingProp.booking_id)
         .where(
             Booking.status.in_(ACTIVE_STATUSES),
-            Booking.starts_at >= day_start,
-            Booking.starts_at < day_end,
+            Booking.starts_at < ends_at,
+            Booking.ends_at > starts_at,
         )
         .group_by(BookingProp.prop_id)
     )
@@ -180,19 +187,65 @@ async def props_committed(
     return dict((await session.execute(stmt)).all())
 
 
+async def props_peak_committed(
+    session: AsyncSession,
+    day: date,
+    *,
+    exclude_booking_id: int | None = None,
+) -> dict[int, int]:
+    """Worst case over `day`: the largest amount of each prop held SIMULTANEOUSLY by
+    active bookings, as {prop_id: amount}.
+
+    Used where the hours aren't known yet (a date is picked but no slot), so the number
+    shown is what is guaranteed free at any hour of that day. Once the slot is chosen,
+    `props_committed` gives the real — usually larger — availability for those hours."""
+    day_start, day_end = day_bounds(day)
+    stmt = (
+        select(BookingProp.prop_id, BookingProp.amount, Booking.starts_at, Booking.ends_at)
+        .join(Booking, Booking.id == BookingProp.booking_id)
+        .where(
+            Booking.status.in_(ACTIVE_STATUSES),
+            Booking.starts_at < day_end,
+            Booking.ends_at > day_start,
+        )
+    )
+    if exclude_booking_id is not None:
+        stmt = stmt.where(Booking.id != exclude_booking_id)
+    # Sweep the day per prop: +amount when a booking starts, -amount when it ends.
+    events: dict[int, list[tuple[datetime, int]]] = {}
+    for prop_id, amount, b_start, b_end in (await session.execute(stmt)).all():
+        events.setdefault(prop_id, []).extend(((b_start, amount), (b_end, -amount)))
+    peak: dict[int, int] = {}
+    for prop_id, evs in events.items():
+        # Sorting by (time, delta) puts the release (-) before the take (+) at the same
+        # instant, so back-to-back bookings hand the equipment over instead of clashing.
+        evs.sort(key=lambda ev: (ev[0], ev[1]))
+        running = best = 0
+        for _, delta in evs:
+            running += delta
+            best = max(best, running)
+        peak[prop_id] = best
+    return peak
+
+
 async def validate_props(
     session: AsyncSession,
     requested: list[tuple[int, int]],
     *,
-    day: date,
+    starts_at: datetime,
+    ends_at: datetime,
     exclude_booking_id: int | None = None,
 ) -> list[tuple[Prop, int]]:
-    """Validate a list of (prop_id, amount) against stock for `day`: a prop's `amount`
-    must cover everything committed by active bookings ON THAT DAY plus this request.
+    """Validate a list of (prop_id, amount) against stock for the event's own hours: a
+    prop's `amount` must cover everything committed by active bookings OVERLAPPING
+    [starts_at, ends_at) plus this request.
     Returns the resolved (Prop, amount) pairs or raises BookingError."""
     if not requested:
         return []
-    committed = await props_committed(session, day, exclude_booking_id=exclude_booking_id)
+    committed = await props_committed(
+        session, starts_at, ends_at, exclude_booking_id=exclude_booking_id
+    )
+    window = f"{starts_at.strftime('%H:%M')}–{ends_at.strftime('%H:%M')}"
     resolved: list[tuple[Prop, int]] = []
     for prop_id, amount in requested:
         prop = await session.get(Prop, prop_id)
@@ -203,7 +256,7 @@ async def validate_props(
             available = max(prop.amount - held, 0)
             unit = prop.unit or "шт."
             raise BookingError(
-                f"Недостаточно «{prop.name}» на выбранную дату: "
+                f"Недостаточно «{prop.name}» на выбранное время ({window}): "
                 f"доступно {available} {unit}, запрошено {amount}."
             )
         # Count this request too, so asking for the same prop twice in one booking
@@ -420,8 +473,10 @@ async def create_booking(
     ):
         raise BookingError("Для мероприятий этой компании укажите департамент/отдел.")
     # Validate prop stock up-front so we don't create a booking we can't fulfil.
-    # Stock is per event day — see props_committed().
-    resolved_props = await validate_props(session, props or [], day=starts_at.date())
+    # Stock is held only for the event's own hours — see props_committed().
+    resolved_props = await validate_props(
+        session, props or [], starts_at=starts_at, ends_at=ends_at
+    )
 
     # Spec rule: bookings <2 days out are always urgent; the user can also opt in.
     # A backdated record is never "urgent" — there is nothing left to hurry for.

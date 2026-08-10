@@ -4,7 +4,7 @@ Auth is by Telegram ``initData`` (see deps.current_customer) — these endpoints
 used by customers booking for themselves, not by panel admins. Booking creation goes
 through the same service layer as the bot, so all validation/notifications are shared.
 """
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
@@ -91,14 +91,26 @@ async def _rooms_out(session: AsyncSession) -> list[ClientRoomOut]:
     ]
 
 
-async def _props_out(session: AsyncSession, day: date | None = None) -> list[PropOut]:
-    """Active equipment with availability FOR A GIVEN EVENT DAY (stock minus the amounts
-    held by active bookings on that same day) — matches what `validate_props` enforces at
-    creation. With no day (bootstrap, before a date is picked) it reports total stock."""
+async def _props_out(
+    session: AsyncSession,
+    *,
+    day: date | None = None,
+    starts_at: datetime | None = None,
+    ends_at: datetime | None = None,
+) -> list[PropOut]:
+    """Active equipment with availability FOR THE CHOSEN EVENT HOURS (stock minus the
+    amounts held by active bookings whose time overlaps) — matches what `validate_props`
+    enforces at creation. Given only a day (slot not picked yet) it reports the worst
+    case over that day; with neither, total stock."""
     props = (
         await session.execute(select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name))
     ).scalars().all()
-    committed = await svc.props_committed(session, day) if day is not None else {}
+    if starts_at is not None and ends_at is not None:
+        committed = await svc.props_committed(session, starts_at, ends_at)
+    elif day is not None:
+        committed = await svc.props_peak_committed(session, day)
+    else:
+        committed = {}
     out: list[PropOut] = []
     for p in props:
         po = PropOut.model_validate(p)
@@ -128,12 +140,21 @@ async def bootstrap(
 @router.get("/props", response_model=list[PropOut])
 async def props_for_day(
     on: date = Query(..., description="Event day — availability is scoped to it"),
+    start: time | None = Query(None, description="Event start, HH:MM — narrows to those hours"),
+    end: time | None = Query(None, description="Event end, HH:MM — narrows to those hours"),
     _: dict = Depends(current_customer),
     session: AsyncSession = Depends(get_session),
 ) -> list[PropOut]:
-    """Equipment availability for a specific event day. The mini app calls this once the
-    date is chosen, so the shown counts match what creation will actually accept."""
-    return await _props_out(session, on)
+    """Equipment availability for the chosen slot. The mini app calls this once the date
+    and time are picked, so the shown counts match what creation will actually accept.
+    Without `start`/`end` it falls back to the worst case over the whole day."""
+    if start is not None and end is not None and end > start:
+        return await _props_out(
+            session,
+            starts_at=svc.combine_local(on, start),
+            ends_at=svc.combine_local(on, end),
+        )
+    return await _props_out(session, day=on)
 
 
 @router.get("/rooms/{room_id}/days", response_model=list[ZoneDayOut])

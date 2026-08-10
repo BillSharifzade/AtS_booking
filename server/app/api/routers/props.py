@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -6,6 +8,7 @@ from app.api.deps import current_admin, current_user
 from app.db import get_session
 from app.models import Prop
 from app.schemas import PropCreate, PropOut, PropUpdate
+from app.services import bookings as svc
 from app.services.bookings import audit
 
 router = APIRouter(prefix="/props", tags=["props"])
@@ -15,15 +18,29 @@ router = APIRouter(prefix="/props", tags=["props"])
 async def list_props(
     active_only: bool = False,
     kind: str | None = None,
+    starts_at: datetime | None = Query(None, description="Event start — fills `available` for those hours"),
+    ends_at: datetime | None = Query(None, description="Event end — fills `available` for those hours"),
     _: tuple[int, str] = Depends(current_user),
     session: AsyncSession = Depends(get_session),
-) -> list[Prop]:
+) -> list[PropOut]:
     stmt = select(Prop).order_by(Prop.kind, Prop.name)
     if active_only:
         stmt = stmt.where(Prop.is_active.is_(True))
     if kind is not None:
         stmt = stmt.where(Prop.kind == kind)
-    return list((await session.execute(stmt)).scalars().all())
+    props = list((await session.execute(stmt)).scalars().all())
+    # Stock is held only for the hours of an event, so `available` is meaningful only
+    # once a slot is known (the panel's booking form passes one). Plain inventory
+    # listings leave it None and show the total `amount`.
+    if starts_at is None or ends_at is None or ends_at <= starts_at:
+        return [PropOut.model_validate(p) for p in props]
+    committed = await svc.props_committed(session, starts_at, ends_at)
+    out: list[PropOut] = []
+    for p in props:
+        po = PropOut.model_validate(p)
+        po.available = max(p.amount - committed.get(p.id, 0), 0)
+        out.append(po)
+    return out
 
 
 @router.post("", response_model=PropOut, status_code=201)

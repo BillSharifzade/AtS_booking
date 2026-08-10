@@ -327,6 +327,9 @@ export type Prop = {
   kind: "tech" | "office";
   unit: string | null;
   amount: number;
+  // Free stock for a requested slot (total minus what overlapping bookings hold).
+  // null when no slot was passed to listProps — then `amount` is all we know.
+  available: number | null;
   description: string | null;
   is_active: boolean;
   created_at: string;
@@ -477,6 +480,8 @@ export const api = {
   complete: (id: number, body?: { outcome?: string | null; note?: string | null }) =>
     request<Booking>(`/bookings/${id}/complete`, { method: "POST", body: JSON.stringify(body ?? {}) }),
   archive: (id: number) => request<Booking>(`/bookings/${id}/archive`, { method: "POST", body: "{}" }),
+  // Permanent removal — the backend allows it only for bookings already in the archive.
+  deleteBooking: (id: number) => request<void>(`/bookings/${id}`, { method: "DELETE" }),
   reassign: (id: number, body: { room_id?: number; zone_id?: number }) =>
     request<BookingWithRoom>(`/bookings/${id}/reassign`, { method: "POST", body: JSON.stringify(body) }),
   listCoffee: () => request<CoffeeBreak[]>("/bookings/coffee"),
@@ -501,10 +506,16 @@ export const api = {
   deleteCompany: (id: number) => request<void>(`/companies/${id}`, { method: "DELETE" }),
 
   // ---- Props / Оборудование (#6) ----
-  listProps: (opts: { activeOnly?: boolean; kind?: string } = {}) => {
+  // Pass startsAt/endsAt (ISO, wall-clock labelled Z) to get `available` for that slot —
+  // equipment is only held for the hours of an event, not the whole day.
+  listProps: (opts: { activeOnly?: boolean; kind?: string; startsAt?: string; endsAt?: string } = {}) => {
     const qs = new URLSearchParams();
     if (opts.activeOnly) qs.set("active_only", "true");
     if (opts.kind) qs.set("kind", opts.kind);
+    if (opts.startsAt && opts.endsAt) {
+      qs.set("starts_at", opts.startsAt);
+      qs.set("ends_at", opts.endsAt);
+    }
     return request<Prop[]>(`/props?${qs.toString()}`);
   },
   createProp: (data: Partial<Prop>) =>

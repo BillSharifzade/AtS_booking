@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import calendar as _cal
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, time, timedelta
 
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart, StateFilter
@@ -687,17 +687,29 @@ async def pick_room_struct(cq: CallbackQuery, state: FSMContext) -> None:
 
 
 # ---------- Equipment ("Оборудование") — same field as mini app / admin ----------
-async def _active_props(session: AsyncSession, day: date) -> list[tuple[Prop, int]]:
-    """Active equipment with availability for the chosen event day (stock minus what
-    active bookings ON THAT DAY already hold) — matches what ``validate_props``
-    enforces at creation. Equipment is returned at the end of each day, so yesterday's
-    booking no longer holds anything today."""
+def _slot_window(data: dict) -> tuple[datetime, datetime]:
+    """The event window already chosen in the FSM (day + HH:MM start/end), as
+    booking-comparable datetimes."""
+    day = date.fromisoformat(data["bdate"])
+    return (
+        svc.combine_local(day, datetime.strptime(data["start"], "%H:%M").time()),
+        svc.combine_local(day, datetime.strptime(data["end"], "%H:%M").time()),
+    )
+
+
+async def _active_props(
+    session: AsyncSession, starts_at: datetime, ends_at: datetime
+) -> list[tuple[Prop, int]]:
+    """Active equipment with availability for the chosen event HOURS (stock minus what
+    active bookings overlapping that window already hold) — matches what
+    ``validate_props`` enforces at creation. Equipment is handed back when an event
+    ends, so a morning booking doesn't hold it for the rest of the day."""
     props = (
         await session.execute(
             select(Prop).where(Prop.is_active.is_(True)).order_by(Prop.kind, Prop.name)
         )
     ).scalars().all()
-    committed = await svc.props_committed(session, day)
+    committed = await svc.props_committed(session, starts_at, ends_at)
     return [(p, max(p.amount - committed.get(p.id, 0), 0)) for p in props]
 
 
@@ -717,7 +729,7 @@ def _props_kb(items: list[tuple[Prop, int]], selected: dict) -> InlineKeyboardMa
 async def _ask_props(msg: Message, state: FSMContext) -> None:
     data = await state.get_data()
     async with SessionLocal() as session:
-        items = await _active_props(session, date.fromisoformat(data["bdate"]))
+        items = await _active_props(session, *_slot_window(data))
     if not items:
         # No equipment configured — skip straight to the coffee-break question.
         await _ask_coffee(msg, state)
@@ -738,7 +750,7 @@ async def props_choose(cq: CallbackQuery, state: FSMContext) -> None:
     pid = int(val)
     data = await state.get_data()
     async with SessionLocal() as session:
-        items = await _active_props(session, date.fromisoformat(data["bdate"]))
+        items = await _active_props(session, *_slot_window(data))
     match = next(((p, a) for p, a in items if p.id == pid), None)
     if match is None:
         await cq.message.answer("Это оборудование недоступно.")
@@ -959,11 +971,7 @@ async def confirm(msg: Message, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    bd = date.fromisoformat(data["bdate"])
-    sh = datetime.strptime(data["start"], "%H:%M").time()
-    eh = datetime.strptime(data["end"], "%H:%M").time()
-    starts_at = datetime.combine(bd, sh, tzinfo=timezone.utc)
-    ends_at = datetime.combine(bd, eh, tzinfo=timezone.utc)
+    starts_at, ends_at = _slot_window(data)
 
     async with SessionLocal() as session:
         # The customer chose a specific room; create_booking re-validates capacity,

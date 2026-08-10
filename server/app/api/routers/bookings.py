@@ -419,6 +419,36 @@ async def complete(
     return booking
 
 
+@router.delete("/{booking_id}", status_code=204)
+async def delete_booking(
+    booking_id: int,
+    admin_id: int = Depends(current_admin),
+    session: AsyncSession = Depends(get_session),
+) -> None:
+    """Permanently remove an archived booking. Archive is the only state this is allowed
+    from — a live request must first run its course (approved/rejected → completed →
+    archived), so nothing anyone is still waiting on can disappear.
+
+    Child rows (история статусов, отзыв, оборудование, чек-лист) go with it via
+    ON DELETE CASCADE; the audit_log entry is written first and survives, so the
+    deletion itself stays on the record."""
+    booking = await session.get(Booking, booking_id)
+    if booking is None:
+        raise HTTPException(404, "not found")
+    if booking.status != BookingStatus.archived:
+        raise HTTPException(
+            409,
+            "Полностью удалить можно только заявку из архива. "
+            "Сначала переведите её в архив.",
+        )
+    await svc.audit(
+        session, admin_id, "booking.delete", "booking", booking.id,
+        f"«{booking.event_name}», {booking.company}, {booking.starts_at:%d.%m.%Y %H:%M}",
+    )
+    await session.delete(booking)
+    await session.commit()
+
+
 @router.post("/{booking_id}/archive", response_model=BookingOut)
 async def archive(
     booking_id: int,

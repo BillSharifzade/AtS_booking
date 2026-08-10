@@ -169,17 +169,18 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
   );
   const askDepartment = needsDepartment(selectedCompany, form.company);
 
-  // Equipment stock is scoped to the event day, so availability is re-fetched whenever
-  // the chosen date changes (the bootstrap list has no date and reports total stock).
-  // Amounts already picked are clamped down if the new day has less free, so the user
-  // sees the limit here instead of hitting a rejection on submit.
+  // Equipment is held only for the HOURS of an event, so availability is re-fetched
+  // whenever the chosen slot changes (a projector busy 08:30–12:00 is free at 14:00;
+  // the bootstrap list has no slot and reports total stock). Amounts already picked are
+  // clamped down if the new slot leaves less free, so the user sees the limit here
+  // instead of hitting a rejection on submit.
   const [dayProps, setDayProps] = useState<Prop[] | null>(null);
   useEffect(() => {
-    const on = form.slot.date;
+    const { date: on, start, end } = form.slot;
     setDayProps(null);
     if (!on) return;
     let alive = true;
-    api.propsOn(on).then((list) => {
+    api.propsOn(on, start || undefined, end || undefined).then((list) => {
       if (!alive) return;
       setDayProps(list);
       setForm((f) => {
@@ -195,7 +196,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       });
     }).catch(() => { /* fall back to the bootstrap counts; creation still validates */ });
     return () => { alive = false; };
-  }, [form.slot.date]);
+  }, [form.slot.date, form.slot.start, form.slot.end]);
   const propsList = dayProps ?? boot.props;
 
   // Mirror the backend rule (services/bookings.is_urgent): bookings starting in
@@ -385,8 +386,8 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       {step === 3 && (
         <Section
           title="Оборудование"
-          subtitle={form.slot.date
-            ? `Необязательно — наличие показано на ${form.slot.date.split("-").reverse().join(".")}`
+          subtitle={form.slot.date && form.slot.start && form.slot.end
+            ? `Необязательно — наличие на ${form.slot.date.split("-").reverse().join(".")}, ${form.slot.start}–${form.slot.end}`
             : "Необязательно — укажите, что нужно"}
         >
           {propsList.length === 0 ? (

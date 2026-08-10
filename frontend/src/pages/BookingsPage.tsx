@@ -129,6 +129,37 @@ export default function BookingsPage() {
     localStorage.setItem(VIEW_KEY, v);
   };
 
+  // Equipment is held only for the hours of an event, so availability is re-fetched
+  // whenever the chosen slot changes (an item busy in the morning is free in the
+  // afternoon). Amounts already typed are clamped to what the new slot leaves free.
+  useEffect(() => {
+    if (!creating || !form.date || !form.start || !form.end) return;
+    let alive = true;
+    api
+      .listProps({
+        activeOnly: true,
+        startsAt: `${form.date}T${form.start}:00Z`,
+        endsAt: `${form.date}T${form.end}:00Z`,
+      })
+      .then((list) => {
+        if (!alive) return;
+        setPropsList(list);
+        setForm((f) => {
+          const capped: Record<number, string> = {};
+          for (const [id, amt] of Object.entries(f.props)) {
+            const picked = parseInt(amt, 10) || 0;
+            if (!picked) continue;
+            const free = list.find((p) => p.id === Number(id))?.available ?? picked;
+            if (picked > free) { if (free > 0) capped[Number(id)] = String(free); }
+            else capped[Number(id)] = String(picked);
+          }
+          return { ...f, props: capped };
+        });
+      })
+      .catch(() => { /* keep the plain stock list; creation still validates */ });
+    return () => { alive = false; };
+  }, [creating, form.date, form.start, form.end]);
+
   const openCreate = async () => {
     setError(null);
     setForm(EMPTY_FORM);
@@ -222,6 +253,26 @@ export default function BookingsPage() {
     const r = reason.trim();
     if (!r) return; // a reason is required by the backend
     actOnRow(id, "rejected", () => api.reject(id, r));
+  };
+
+  // Permanent deletion — offered only for archived bookings (the backend enforces it
+  // too). Confirmed in a modal because it can't be undone.
+  const [deleteTarget, setDeleteTarget] = useState<Booking | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteBusy(true);
+    setDeleteError(null);
+    try {
+      await api.deleteBooking(deleteTarget.id);
+      setBookings((bs) => bs.filter((x) => x.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (e) {
+      setDeleteError((e as Error).message);
+    } finally {
+      setDeleteBusy(false);
+    }
   };
 
   // Whether this booking must state the department — an explicit per-company switch
@@ -334,6 +385,17 @@ export default function BookingsPage() {
                         <span className="tick-done" title="Подтверждён">✓</span>
                       ) : b.status === "rejected" ? (
                         <span className="cross-done" title="Отклонена">✕</span>
+                      ) : b.status === "archived" ? (
+                        <button
+                          className="icon-btn-sq delete"
+                          title="Удалить заявку полностью"
+                          disabled={actingId === b.id}
+                          onClick={(e) => { e.stopPropagation(); setDeleteError(null); setDeleteTarget(b); }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 11v6M14 11v6" />
+                          </svg>
+                        </button>
                       ) : "—"}
                     </td>
                   );
@@ -344,6 +406,34 @@ export default function BookingsPage() {
         </table>
       )}
       </>
+      )}
+
+      {deleteTarget && createPortal(
+        <div className="modal-overlay" onClick={() => !deleteBusy && setDeleteTarget(null)}>
+          <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>Удалить заявку №{deleteTarget.id}?</h3>
+              <button className="icon-close" onClick={() => setDeleteTarget(null)} aria-label="Закрыть">✕</button>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: 0 }}>
+                «{deleteTarget.event_name}» — {deleteTarget.company}, {fmt(deleteTarget.starts_at)}.
+              </p>
+              <span className="field-hint">
+                Заявка будет удалена безвозвратно вместе с историей статусов, отзывом, чек-листом
+                и заявкой на оборудование. Запись о самом удалении останется в журнале действий.
+              </span>
+              {deleteError && <div className="error">{deleteError}</div>}
+            </div>
+            <div className="modal-foot">
+              <button onClick={() => setDeleteTarget(null)} disabled={deleteBusy}>Отмена</button>
+              <button className="danger" onClick={confirmDelete} disabled={deleteBusy}>
+                {deleteBusy ? "Удаление…" : "Удалить навсегда"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
       )}
 
       {creating && createPortal(
@@ -437,20 +527,27 @@ export default function BookingsPage() {
                   {propsList.length > 0 && (
                     <div className="field">
                       <label>Оборудование</label>
-                      {propsList.map((p) => (
-                        <div key={p.id} className="prop-pick-row">
-                          <span className="prop-name">{p.name} <span className="prop-unit">· доступно {p.amount} {p.unit || "шт."}</span></span>
-                          <input
-                            inputMode="numeric"
-                            placeholder="0"
-                            value={form.props[p.id] ?? ""}
-                            max={p.amount}
-                            onChange={(e) => setForm({ ...form, props: { ...form.props, [p.id]: e.target.value } })}
-                          />
-                          <span className="prop-unit">{p.unit || "шт."}</span>
-                        </div>
-                      ))}
-                      <span className="field-hint">Укажите нужное количество. При нехватке заявку не получится создать.</span>
+                      {propsList.map((p) => {
+                        const free = p.available ?? p.amount;
+                        return (
+                          <div key={p.id} className="prop-pick-row">
+                            <span className="prop-name">{p.name} <span className="prop-unit">· доступно {free} {p.unit || "шт."}</span></span>
+                            <input
+                              inputMode="numeric"
+                              placeholder="0"
+                              value={form.props[p.id] ?? ""}
+                              max={free}
+                              onChange={(e) => setForm({ ...form, props: { ...form.props, [p.id]: e.target.value } })}
+                            />
+                            <span className="prop-unit">{p.unit || "шт."}</span>
+                          </div>
+                        );
+                      })}
+                      <span className="field-hint">
+                        {form.date && form.start && form.end
+                          ? `Доступно на выбранное время ${form.start}–${form.end}: оборудование занято только на часы мероприятия и освобождается после него.`
+                          : "Выберите дату и время — количество пересчитается под часы мероприятия."}
+                      </span>
                     </div>
                   )}
                   <div className="row2">

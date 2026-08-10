@@ -363,6 +363,8 @@ table tbody tr[onclick], .clickable-rows tbody tr { cursor: pointer; }
 .icon-btn-sq.approve:hover:not(:disabled) { background: var(--green-soft); border-color: var(--green); }
 .icon-btn-sq.reject { color: var(--red); }
 .icon-btn-sq.reject:hover:not(:disabled) { background: var(--red-soft); border-color: var(--red); }
+.icon-btn-sq.delete { color: var(--muted-2); }
+.icon-btn-sq.delete:hover:not(:disabled) { color: var(--red); background: var(--red-soft); border-color: var(--red); }
 .tick-done { color: var(--green); font-weight: 700; }
 .cross-done { color: var(--red); font-weight: 700; }
 tr:last-child td { border-bottom: none; }
@@ -638,6 +640,8 @@ tr:last-child td { border-bottom: none; }
   border-radius: 14px; box-shadow: var(--shadow-lg);
   animation: modalIn 0.24s var(--ease) both;
 }
+/* Short confirmations (deletion, etc.) — a full-width sheet looks empty for two lines. */
+.modal.narrow { max-width: 460px; }
 .modal-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 18px 24px; border-bottom: 1px solid var(--border);

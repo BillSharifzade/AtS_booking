@@ -83,6 +83,7 @@ const AUDIT_ACTION_LABELS: Record<string, string> = {
   "booking.reject": "Отклонение заявки",
   "booking.complete": "Завершение мероприятия",
   "booking.archive": "Архивация заявки",
+  "booking.delete": "Удаление заявки из архива",
   "booking.reassign": "Перенос помещения",
   "booking.coffee": "Кофе-брейк: подготовка",
   "panel_user.add": "Добавление наблюдателя",

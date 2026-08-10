@@ -64,6 +64,7 @@ export default function BookingDetailPage() {
   const [outcome, setOutcome] = useState("held");
   const [resultNote, setResultNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [deleteMode, setDeleteMode] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [reassignTo, setReassignTo] = useState("");
@@ -114,6 +115,9 @@ export default function BookingDetailPage() {
   const canReject = b.status === "new" || b.status === "processing" || b.status === "approved";
   const canComplete = b.status === "approved";
   const canArchive = b.status === "completed" || b.status === "rejected";
+  // Permanent deletion is offered only from the archive — the backend enforces the
+  // same rule, so a live request can never vanish while someone waits on it.
+  const canDelete = b.status === "archived";
   const admin = isAdmin();
   const canReassign = admin && (b.status === "new" || b.status === "processing" || b.status === "approved");
 
@@ -441,7 +445,45 @@ export default function BookingDetailPage() {
             В архив
           </button>
         )}
+        {canDelete && !deleteMode && (
+          <button className="danger" disabled={busy} onClick={() => setDeleteMode(true)}>
+            Удалить полностью
+          </button>
+        )}
       </div>
+      )}
+
+      {deleteMode && (
+        <div className="card" style={{ marginTop: 12 }}>
+          <h3>Удаление заявки</h3>
+          <div className="field">
+            <span className="field-hint">
+              Заявка №{b.id} «{b.event_name}» будет удалена безвозвратно вместе с историей
+              статусов, отзывом, чек-листом и заявкой на оборудование. Восстановить её будет
+              нельзя — запись о самом удалении сохранится только в журнале действий.
+            </span>
+          </div>
+          <div className="actions">
+            <button
+              className="danger"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await api.deleteBooking(b.id);
+                  nav("/bookings");
+                } catch (e) {
+                  setError((e as Error).message);
+                  setBusy(false);
+                }
+              }}
+            >
+              Удалить навсегда
+            </button>
+            <button disabled={busy} onClick={() => setDeleteMode(false)}>Отмена</button>
+          </div>
+        </div>
       )}
 
       {rejectMode && (
