@@ -31,7 +31,9 @@ export type Status = "new" | "processing" | "approved" | "rejected" | "completed
 export type Company = { id: number; name: string; website_url: string | null; is_active: boolean; requires_department: boolean; has_logo: boolean };
 // A bookable room (zones are admin-only and never exposed to clients). `photos` holds
 // RoomImage ids; build the URL via roomImageUrl(room.id, imageId).
-export type Room = { id: number; name: string; capacity: string; meter_squared: number | null; photos: number[] };
+// `is_vip`: VIP auditoriums (Vip-большой / Vip-малый) — the only rooms where a
+// coffee break other than the standard one can be requested.
+export type Room = { id: number; name: string; capacity: string; meter_squared: number | null; is_vip: boolean; photos: number[] };
 export type Prop = { id: number; name: string; kind: "tech" | "office"; unit: string | null; amount: number; available: number | null; description: string | null };
 export type ClientUser = { telegram_id: number; name: string | null; username: string | null };
 export type Bootstrap = { user: ClientUser; companies: Company[]; rooms: Room[]; props: Prop[] };
@@ -89,8 +91,9 @@ export type NewBooking = {
   room_struct: RoomStruct | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
+  // "standard" | "other" — "other" is accepted for VIP rooms only, and the server
+  // fills in its fixed contents (COFFEE_OTHER_VIP), so no text is sent.
   coffee_type: string | null;
-  coffee_other: string | null;
   foreign_guests: boolean;
   is_urgent: boolean;
   privacy_accepted: boolean;

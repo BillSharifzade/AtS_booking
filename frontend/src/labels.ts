@@ -37,10 +37,12 @@ export const COFFEE_STATUS_LABELS: Record<string, string> = {
 };
 export const COFFEE_STATUS_ORDER = ["pending", "ready", "served", "not_required"];
 
-// What's served at the coffee break (#коф).
+// What's served at the coffee break (#коф). "other" is offered in VIP rooms only and
+// is a fixed set — COFFEE_OTHER_VIP mirrors services/bookings.py.
+export const COFFEE_OTHER_VIP = "Конфеты, сухофрукты, вода 0,5 л";
 export const COFFEE_TYPE_LABELS: Record<string, string> = {
   standard: "Стандартный (печенье, кофе, чай, конфеты)",
-  other: "Другое",
+  other: COFFEE_OTHER_VIP,
 };
 
 // Seating arrangements ("Расстановка", #3).

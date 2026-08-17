@@ -29,7 +29,7 @@ from app.db import SessionLocal
 from app.models import Booking, BookingProp, ChatMessage, Company, Feedback, Prop, Room, RoomImage
 from app.services import availability as avail
 from app.services import bookings as svc
-from app.services.bookings import GRADES, ROOM_STRUCTS, needs_department
+from app.services.bookings import COFFEE_OTHER_VIP, GRADES, ROOM_STRUCTS, needs_department
 from app.schemas import EVENT_TYPES, GRADES as GRADE_ORDER
 from app.services.notifications import ROOM_STRUCT_LABELS, notify_new
 from app.services.notify_prefs import current_prefs
@@ -84,7 +84,6 @@ class Booking_FSM(StatesGroup):
     coffee = State()
     coffee_count = State()
     coffee_type = State()
-    coffee_other = State()
     foreign_guests = State()
     urgent = State()
     confirm = State()
@@ -279,6 +278,10 @@ async def pick_room(cq: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(room_id=int(cq.data.split(":")[1]))
     await cq.answer()
     data = await state.get_data()
+    # Switching to a non-VIP room via the fix menu drops a previously picked
+    # non-standard coffee break — it isn't on offer there.
+    if data.get("coffee_type") == "other" and not await _room_is_vip(data):
+        await state.update_data(coffee_type="standard", coffee_other=None)
     if data.get("mode") == "edit":
         await _show_calendar(cq.message, state)
     else:
@@ -823,12 +826,27 @@ async def get_coffee_count(msg: Message, state: FSMContext) -> None:
         await msg.answer(t.INVALID_NUMBER)
         return
     await state.update_data(coffee_count=n)
-    await _ask_coffee_type(msg, state)
+    # Only VIP rooms offer anything besides the standard set — elsewhere there is
+    # nothing to choose, so skip the question entirely.
+    if await _room_is_vip(await state.get_data()):
+        await _ask_coffee_type(msg, state)
+    else:
+        await state.update_data(coffee_type="standard", coffee_other=None)
+        await _ask_foreign(msg, state)
+
+
+async def _room_is_vip(data: dict) -> bool:
+    room_id = data.get("room_id")
+    if not room_id:
+        return False
+    async with SessionLocal() as session:
+        room = await session.get(Room, room_id)
+    return bool(room and room.is_vip)
 
 
 def _coffee_type_kb() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="стандарт"), KeyboardButton(text="другое")]],
+        keyboard=[[KeyboardButton(text="стандарт"), KeyboardButton(text=COFFEE_OTHER_VIP)]],
         resize_keyboard=True,
         one_time_keyboard=True,
     )
@@ -845,22 +863,12 @@ async def get_coffee_type(msg: Message, state: FSMContext) -> None:
     if ans.startswith("стандарт"):
         await state.update_data(coffee_type="standard", coffee_other=None)
         await _ask_foreign(msg, state)
-    elif ans.startswith("друг"):
-        await state.update_data(coffee_type="other")
-        await state.set_state(Booking_FSM.coffee_other)
-        await msg.answer(t.ENTER_COFFEE_OTHER, reply_markup=ReplyKeyboardRemove())
+    elif ans.startswith("конфет") or ans.startswith("друг"):
+        # The non-standard option is a fixed set, not free text.
+        await state.update_data(coffee_type="other", coffee_other=COFFEE_OTHER_VIP)
+        await _ask_foreign(msg, state)
     else:
         await msg.answer(t.COFFEE_TYPE_QUESTION, reply_markup=_coffee_type_kb())
-
-
-@router.message(Booking_FSM.coffee_other)
-async def get_coffee_other(msg: Message, state: FSMContext) -> None:
-    text = (msg.text or "").strip()
-    if not text:
-        await msg.answer(t.ENTER_COFFEE_OTHER)
-        return
-    await state.update_data(coffee_other=text)
-    await _ask_foreign(msg, state)
 
 
 async def _ask_foreign(msg: Message, state: FSMContext) -> None:
@@ -1006,7 +1014,6 @@ async def confirm(msg: Message, state: FSMContext) -> None:
                 coffee_break=data["coffee"],
                 coffee_headcount=data.get("coffee_count"),
                 coffee_type=data.get("coffee_type"),
-                coffee_other=data.get("coffee_other"),
                 foreign_guests=data.get("foreign_guests", False),
                 urgent=data.get("urgent", False),
                 props=[(int(k), v) for k, v in (data.get("props") or {}).items()],

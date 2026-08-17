@@ -8,7 +8,7 @@ import { TableSkeleton } from "../components/Skeleton";
 import KanbanBoard from "../components/KanbanBoard";
 import DateTimePicker from "../components/DateTimePicker";
 import RoomStructPicker from "../components/RoomStructPicker";
-import { EVENT_TYPES, GRADES, needsDepartment } from "../labels";
+import { COFFEE_TYPE_LABELS, EVENT_TYPES, GRADES, needsDepartment } from "../labels";
 import { useNotifications } from "../notifications";
 
 const VIEW_KEY = "ats_bookings_view";
@@ -54,7 +54,6 @@ type FormState = {
   coffee_break: boolean;
   coffee_headcount: string;
   coffee_type: string;
-  coffee_other: string;
   foreign_guests: boolean;
   is_urgent: boolean;
   // Registering an event that already took place (past slots, no notifications).
@@ -87,7 +86,6 @@ const EMPTY_FORM: FormState = {
   coffee_break: false,
   coffee_headcount: "",
   coffee_type: "standard",
-  coffee_other: "",
   foreign_guests: false,
   is_urgent: false,
   allow_past: false,
@@ -207,7 +205,6 @@ export default function BookingsPage() {
         coffee_break: form.coffee_break,
         coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
         coffee_type: form.coffee_break ? form.coffee_type : null,
-        coffee_other: form.coffee_break && form.coffee_type === "other" ? form.coffee_other.trim() || null : null,
         foreign_guests: form.coffee_break ? form.foreign_guests : false,
         is_urgent: form.is_urgent,
         allow_past: form.allow_past,
@@ -279,6 +276,11 @@ export default function BookingsPage() {
   // (falls back to the name rule for a company typed by hand).
   const selectedCompany = companies.find((c) => String(c.id) === form.company_id) ?? null;
   const askDepartment = needsDepartment(selectedCompany, form.company);
+
+  // The non-standard coffee break is offered in VIP rooms only; everywhere else the
+  // choice is hidden and the booking goes out standard.
+  const selectedRoom = rooms.find((r) => String(r.id) === form.room_id) ?? null;
+  const coffeeChoice = !!selectedRoom?.is_vip;
 
   const valid =
     form.room_id && form.date && form.start && form.end && form.company && form.contact_name &&
@@ -451,10 +453,18 @@ export default function BookingsPage() {
                   <div className="row2">
                     <div className="field">
                       <label>Помещение</label>
-                      <select value={form.room_id} onChange={(e) => setForm({ ...form, room_id: e.target.value, date: "", start: "", end: "" })}>
+                      <select value={form.room_id} onChange={(e) => {
+                        // A non-VIP room offers no coffee-break choice — drop one
+                        // picked while a VIP room was selected.
+                        const room = rooms.find((r) => String(r.id) === e.target.value);
+                        setForm({
+                          ...form, room_id: e.target.value, date: "", start: "", end: "",
+                          coffee_type: room?.is_vip ? form.coffee_type : "standard",
+                        });
+                      }}>
                         {rooms.map((r) => (
                           <option key={r.id} value={r.id}>
-                            {r.name} · {r.zone_name} · до {r.capacity}{r.is_coffee_break ? " · кофе-брейк" : ""}
+                            {r.name} · {r.zone_name} · до {r.capacity}{r.is_vip ? " · VIP" : ""}{r.is_coffee_break ? " · кофе-брейк" : ""}
                           </option>
                         ))}
                       </select>
@@ -592,16 +602,19 @@ export default function BookingsPage() {
                         <div className="field"><label>Кол-во кофе-брейков</label>
                           <input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => setForm({ ...form, coffee_headcount: e.target.value })} /></div>
                         <div className="field"><label>Что нужно</label>
-                          <select value={form.coffee_type} onChange={(e) => setForm({ ...form, coffee_type: e.target.value })}>
-                            <option value="standard">Стандартный (печенье, кофе, чай, конфеты)</option>
-                            <option value="other">Другое</option>
-                          </select>
+                          {coffeeChoice ? (
+                            <select value={form.coffee_type} onChange={(e) => setForm({ ...form, coffee_type: e.target.value })}>
+                              <option value="standard">{COFFEE_TYPE_LABELS.standard}</option>
+                              <option value="other">{COFFEE_TYPE_LABELS.other}</option>
+                            </select>
+                          ) : (
+                            <>
+                              <input value={COFFEE_TYPE_LABELS.standard} disabled />
+                              <span className="field-hint">Другой состав доступен только в VIP-аудиториях.</span>
+                            </>
+                          )}
                         </div>
                       </div>
-                      {form.coffee_type === "other" && (
-                        <div className="field"><label>Опишите, что нужно</label>
-                          <input value={form.coffee_other} onChange={(e) => setForm({ ...form, coffee_other: e.target.value })} placeholder="напр. фрукты, сэндвичи…" /></div>
-                      )}
                       <div className="field">
                         <label>
                           <input type="checkbox" style={{ width: "auto", marginRight: 8 }}

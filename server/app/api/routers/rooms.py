@@ -99,6 +99,8 @@ async def create_room(
     session.add(room)
     await session.flush()
     kind = "кофе-брейк" if room.is_coffee_break else "помещение"
+    if room.is_vip:
+        kind += ", VIP"
     detail = (
         f"«{room.name}» ({kind}), зона {zone.name}, {room.capacity}, "
         f"{room.open_time.strftime('%H:%M')}–{room.close_time.strftime('%H:%M')}"
@@ -117,6 +119,7 @@ _ROOM_FIELD_LABELS = {
     "notes": "заметки",
     "is_active": "активность",
     "is_coffee_break": "кофе-брейк",
+    "is_vip": "VIP",
 }
 
 

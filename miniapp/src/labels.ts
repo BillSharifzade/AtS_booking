@@ -16,6 +16,10 @@ export const ROOM_STRUCT_HINTS: Record<RoomStruct, string> = {
 };
 export const ROOM_STRUCT_ORDER: RoomStruct[] = ["theatre", "class", "banquet", "u_shaped", "conference"];
 
+// The non-standard coffee break: a fixed set, offered in VIP rooms only. Mirrors
+// services/bookings.py COFFEE_OTHER_VIP — the server fills the text in itself.
+export const COFFEE_OTHER_VIP = "Конфеты, сухофрукты, вода 0,5 л";
+
 // Requester grade ("Грейд заявителя", #1) — fixed dropdown, order mirrors the backend
 // GRADES. «Руководитель отдела»/«департамента» are merged into one entry.
 export const GRADES = [

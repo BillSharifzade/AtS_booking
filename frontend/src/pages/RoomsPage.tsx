@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, Room, Zone } from "../api";
 import { isAdmin } from "../auth";
+import { COFFEE_OTHER_VIP } from "../labels";
 import { TableSkeleton } from "../components/Skeleton";
 import RoomImages, { PendingImage } from "../components/RoomImages";
 import ZonesCard from "../components/ZonesCard";
@@ -16,6 +17,7 @@ type FormState = {
   notes: string;
   is_active: boolean;
   is_coffee_break: boolean;
+  is_vip: boolean;
 };
 
 const EMPTY: FormState = {
@@ -28,6 +30,7 @@ const EMPTY: FormState = {
   notes: "",
   is_active: true,
   is_coffee_break: false,
+  is_vip: false,
 };
 
 export default function RoomsPage() {
@@ -67,6 +70,7 @@ export default function RoomsPage() {
       notes: r.notes ?? "",
       is_active: r.is_active,
       is_coffee_break: r.is_coffee_break,
+      is_vip: r.is_vip,
     });
   };
 
@@ -85,6 +89,7 @@ export default function RoomsPage() {
         notes: form.notes || null,
         is_active: form.is_active,
         is_coffee_break: form.is_coffee_break,
+        is_vip: form.is_vip,
       };
       if (form.id) {
         await api.updateRoom(form.id, payload as Partial<Room>);
@@ -177,6 +182,20 @@ export default function RoomsPage() {
             </label>
           </div>
           <div className="field">
+            <label className="switch">
+              <input type="checkbox"
+                checked={form.is_vip} onChange={(e) => setForm({ ...form, is_vip: e.target.checked })} />
+              <span className="switch-track" />
+              <span className="switch-label">
+                VIP-аудитория
+                <span className="switch-hint">
+                  Только в VIP-аудиториях можно выбрать кофе-брейк «{COFFEE_OTHER_VIP}».
+                  В остальных помещениях доступен только стандартный.
+                </span>
+              </span>
+            </label>
+          </div>
+          <div className="field">
             <label>
               <input type="checkbox" style={{ width: "auto", marginRight: 6 }}
                 checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
@@ -210,6 +229,7 @@ export default function RoomsPage() {
               <tr key={r.id}>
                 <td>
                   {r.name}
+                  {r.is_vip && <span className="badge vip" style={{ marginLeft: 8 }}>vip</span>}
                   {r.is_coffee_break && <span className="badge coffee" style={{ marginLeft: 8 }}>кофе-брейк</span>}
                 </td>
                 <td><span className="badge zone">{r.zone_name}</span></td>

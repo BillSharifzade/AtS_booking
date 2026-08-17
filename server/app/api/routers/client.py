@@ -85,7 +85,7 @@ async def _rooms_out(session: AsyncSession) -> list[ClientRoomOut]:
     return [
         ClientRoomOut(
             id=r.id, name=r.name, capacity=r.capacity, meter_squared=r.meter_squared,
-            photos=photos_by_room.get(r.id, [])[:8],
+            is_vip=r.is_vip, photos=photos_by_room.get(r.id, [])[:8],
         )
         for r in rooms
     ]
@@ -220,7 +220,6 @@ async def create_booking(
             coffee_break=payload.coffee_break,
             coffee_headcount=payload.coffee_headcount,
             coffee_type=payload.coffee_type,
-            coffee_other=payload.coffee_other,
             foreign_guests=payload.foreign_guests,
             urgent=payload.is_urgent,
             room_struct=payload.room_struct,

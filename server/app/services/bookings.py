@@ -124,6 +124,15 @@ GRADES = {
 # What can be served at a coffee break. Mirrors schemas.COFFEE_TYPES.
 COFFEE_TYPES = {"standard", "other"}
 
+# The non-standard ("other") coffee break is a fixed set, not free text, and it is
+# offered only in VIP rooms (Room.is_vip). Everywhere else the coffee break can only
+# be the standard one. Bookings created before this rule keep their own free text.
+COFFEE_OTHER_VIP = "Конфеты, сухофрукты, вода 0,5 л"
+COFFEE_OTHER_NOT_VIP = (
+    "Расширенный кофе-брейк доступен только в VIP-аудиториях. "
+    "Для этого помещения выберите стандартный кофе-брейк."
+)
+
 # Statuses that "hold" a resource (room slot / prop stock).
 ACTIVE_STATUSES = [BookingStatus.new, BookingStatus.processing, BookingStatus.approved]
 
@@ -408,7 +417,6 @@ async def create_booking(
     coffee_break: bool,
     coffee_headcount: int | None,
     coffee_type: str | None = None,
-    coffee_other: str | None = None,
     foreign_guests: bool = False,
     urgent: bool = False,
     room_struct: str | None = None,
@@ -447,9 +455,11 @@ async def create_booking(
         if coffee_type_val not in COFFEE_TYPES:
             raise BookingError("Неизвестный тип кофе-брейка.")
         if coffee_type_val == "other":
-            coffee_other_val = (coffee_other or "").strip() or None
-            if coffee_other_val is None:
-                raise BookingError("Опишите, что нужно на кофе-брейке.")
+            # Only VIP rooms offer anything beyond the standard set, and what they
+            # offer is a fixed list — callers don't get to write their own.
+            if not room.is_vip:
+                raise BookingError(COFFEE_OTHER_NOT_VIP)
+            coffee_other_val = COFFEE_OTHER_VIP
     if await has_conflict(session, room.id, starts_at, ends_at):
         raise BookingError("Слот уже занят.")
     off = await has_offtime(session, room.id, starts_at, ends_at)

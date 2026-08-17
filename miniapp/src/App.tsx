@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, Bootstrap, ClientBooking, companyLogoUrl, NewBooking, Prop, Room, RoomStruct, roomImageUrl } from "./api";
 import { haptic, isTelegram } from "./telegram";
 import logoUrl from "./assets/logo.png";
-import { EVENT_TYPES, GRADES, needsDepartment, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_DOC_LABEL, RULES_DOC_URL, RULES_INTRO_AFTER, RULES_INTRO_BEFORE, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
+import { COFFEE_OTHER_VIP, EVENT_TYPES, GRADES, needsDepartment, roomFits, ROOM_STRUCT_HINTS, ROOM_STRUCT_LABELS, ROOM_STRUCT_ORDER, RULES_DOC_LABEL, RULES_DOC_URL, RULES_INTRO_AFTER, RULES_INTRO_BEFORE, RULES_LINKS, STATUS_LABELS, STATUS_TONE } from "./labels";
 import RoomStructDiagram from "./components/RoomStructDiagram";
 import Calendar, { SlotValue } from "./components/Calendar";
 import Stars from "./components/Stars";
@@ -35,8 +35,8 @@ type Form = {
   phone: string;
   coffee_break: boolean;
   coffee_headcount: string;
+  // "other" is offered in VIP rooms only, where it means a fixed set (COFFEE_OTHER_VIP).
   coffee_type: "standard" | "other";
-  coffee_other: string;
   foreign_guests: boolean;
   is_urgent: boolean;
   // Participation-rules acknowledgement (#4): one checkbox per required document.
@@ -49,7 +49,7 @@ const emptyForm = (name: string): Form => ({
   event_name: "", event_type: "", description: "", aim: "", grade: "", extra_services: "",
   position: "", department: "", target_employees: "",
   contact_name: name, phone: "",
-  coffee_break: false, coffee_headcount: "", coffee_type: "standard", coffee_other: "", foreign_guests: false,
+  coffee_break: false, coffee_headcount: "", coffee_type: "standard", foreign_guests: false,
   is_urgent: false,
   agree: RULES_LINKS.map(() => false),
 });
@@ -217,7 +217,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
         form.position.trim() && form.target_employees.trim() &&
         (!askDepartment || form.department.trim()) &&
         form.contact_name.trim() && form.phone.trim() &&
-        (!form.coffee_break || (form.coffee_headcount && (form.coffee_type !== "other" || form.coffee_other.trim()))));
+        (!form.coffee_break || !!form.coffee_headcount));
       case 5: return form.agree.every(Boolean); // must acknowledge every document
       default: return true;
     }
@@ -249,7 +249,6 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
       coffee_break: form.coffee_break,
       coffee_headcount: form.coffee_break && form.coffee_headcount ? parseInt(form.coffee_headcount, 10) : null,
       coffee_type: form.coffee_break ? form.coffee_type : null,
-      coffee_other: form.coffee_break && form.coffee_type === "other" ? form.coffee_other.trim() || null : null,
       foreign_guests: form.coffee_break ? form.foreign_guests : false,
       is_urgent: form.is_urgent,
       starts_at: `${form.slot.date}T${form.slot.start}:00Z`,
@@ -325,7 +324,15 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
                   <button
                     key={r.id}
                     className={`room-card ${form.room_id === r.id ? "on" : ""}`}
-                    onClick={() => { set({ room_id: r.id, slot: { date: "", start: "", end: "" } }); haptic(); }}
+                    onClick={() => {
+                      // Only VIP rooms offer a non-standard coffee break — moving to
+                      // another room drops the choice.
+                      set({
+                        room_id: r.id, slot: { date: "", start: "", end: "" },
+                        ...(r.is_vip ? {} : { coffee_type: "standard" as const }),
+                      });
+                      haptic();
+                    }}
                   >
                     <div className="room-photo">
                       {r.photos.length > 0 ? (
@@ -341,6 +348,7 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
                       <div className="room-meta">
                         <span className="room-chip"><IconUsers />{r.capacity}</span>
                         {r.meter_squared ? <span className="room-chip alt"><IconArea />{r.meter_squared} м²</span> : null}
+                        {r.is_vip && <span className="room-chip vip">VIP</span>}
                       </div>
                     </div>
                   </button>
@@ -464,15 +472,22 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
             <>
               <Field label="Кол-во кофе-брейков"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
               <Field label="Что нужно">
-                <div className="seg">
-                  <button type="button" className={`seg-btn ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>Стандартный</button>
-                  <button type="button" className={`seg-btn ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>Другое</button>
-                </div>
-                <p className="field-note">{form.coffee_type === "standard" ? "Печенье, кофе, чай, конфеты." : "Опишите, что нужно на кофе-брейке."}</p>
+                {selectedRoom?.is_vip ? (
+                  <>
+                    <div className="seg">
+                      <button type="button" className={`seg-btn ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>Стандартный</button>
+                      <button type="button" className={`seg-btn ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>{COFFEE_OTHER_VIP}</button>
+                    </div>
+                    <p className="field-note">
+                      {form.coffee_type === "standard" ? "Печенье, кофе, чай, конфеты." : `${COFFEE_OTHER_VIP}.`}
+                    </p>
+                  </>
+                ) : (
+                  <p className="field-note">
+                    Стандартный: печенье, кофе, чай, конфеты. Другой состав доступен только в VIP-аудиториях.
+                  </p>
+                )}
               </Field>
-              {form.coffee_type === "other" && (
-                <Field label="Что именно"><input value={form.coffee_other} onChange={(e) => set({ coffee_other: e.target.value })} placeholder="напр. фрукты, сэндвичи…" /></Field>
-              )}
               <label className="check">
                 <input type="checkbox" checked={form.foreign_guests} onChange={(e) => set({ foreign_guests: e.target.checked })} />
                 Гости иностранцы

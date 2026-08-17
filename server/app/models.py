@@ -63,6 +63,9 @@ class Room(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Coffee-break rooms are catering/logistics spaces — not directly bookable by customers.
     is_coffee_break: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # VIP rooms (Vip-большой / Vip-малый) are the only ones where a non-standard
+    # coffee break may be requested — see services.bookings.COFFEE_OTHER_VIP.
+    is_vip: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

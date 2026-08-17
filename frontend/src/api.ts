@@ -56,6 +56,9 @@ export type Room = {
   close_time: string;
   is_active: boolean;
   is_coffee_break: boolean;
+  // VIP room (Vip-большой / Vip-малый): the only rooms where the non-standard
+  // coffee break can be requested.
+  is_vip: boolean;
   notes: string | null;
 };
 
@@ -299,8 +302,9 @@ export type NewBooking = {
   room_struct?: RoomStruct | null;
   coffee_break: boolean;
   coffee_headcount: number | null;
+  /** "standard" | "other" — "other" is accepted for VIP rooms only, and the server
+   *  fills in its fixed contents (COFFEE_OTHER_VIP), so no text is sent. */
   coffee_type?: string | null;
-  coffee_other?: string | null;
   foreign_guests?: boolean;
   is_urgent: boolean;
   /** Register an event that already happened — past slots + no client notifications. */

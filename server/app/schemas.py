@@ -67,6 +67,7 @@ class RoomCreate(BaseModel):
     notes: str | None = None
     is_active: bool = True
     is_coffee_break: bool = False
+    is_vip: bool = False
 
 
 class RoomUpdate(BaseModel):
@@ -79,6 +80,7 @@ class RoomUpdate(BaseModel):
     notes: str | None = None
     is_active: bool | None = None
     is_coffee_break: bool | None = None
+    is_vip: bool | None = None
 
 
 class RoomOut(BaseModel):
@@ -93,6 +95,7 @@ class RoomOut(BaseModel):
     close_time: time
     is_active: bool
     is_coffee_break: bool
+    is_vip: bool
     notes: str | None
 
 
@@ -152,8 +155,10 @@ class BookingCreate(BaseModel):
     coffee_break: bool = False
     # Number of coffee breaks during the event (legacy field name).
     coffee_headcount: int | None = Field(default=None, ge=0)
-    coffee_type: str | None = None  # "standard" | "other"
-    coffee_other: str | None = Field(default=None, max_length=500)
+    # "standard" | "other" — "other" is accepted only for VIP rooms and always
+    # resolves to the fixed set (services.bookings.COFFEE_OTHER_VIP), so the
+    # caller never supplies the text.
+    coffee_type: str | None = None
     foreign_guests: bool = False
     is_urgent: bool = False
     privacy_accepted: bool = False
@@ -266,7 +271,8 @@ class ReassignIn(BaseModel):
 # Allowed coffee-break prep states (Module E).
 COFFEE_STATUSES = {"pending", "ready", "served", "not_required"}
 
-# What's served at the coffee break: a fixed standard set, or free-text "other".
+# What's served at the coffee break: the standard set, or the "other" set — which is
+# offered in VIP rooms only (see services.bookings.COFFEE_OTHER_VIP).
 COFFEE_TYPES = {"standard", "other"}
 
 
@@ -683,6 +689,9 @@ class ClientRoomOut(BaseModel):
     name: str
     capacity: str
     meter_squared: int | None = None
+    # VIP rooms are the only ones where the non-standard coffee break can be picked;
+    # the client form uses this to hide the choice everywhere else.
+    is_vip: bool = False
     # RoomImage ids; the raw bytes are served publicly at /rooms/{id}/images/{image_id}/raw.
     photos: list[int] = []
 
@@ -715,8 +724,10 @@ class ClientBookingCreate(BaseModel):
     coffee_break: bool = False
     # Number of coffee breaks during the event (legacy field name).
     coffee_headcount: int | None = Field(default=None, ge=0)
-    coffee_type: str | None = None  # "standard" | "other"
-    coffee_other: str | None = Field(default=None, max_length=500)
+    # "standard" | "other" — "other" is accepted only for VIP rooms and always
+    # resolves to the fixed set (services.bookings.COFFEE_OTHER_VIP), so the
+    # caller never supplies the text.
+    coffee_type: str | None = None
     foreign_guests: bool = False
     is_urgent: bool = False
     # Client acknowledged the participation rules (required by the form).

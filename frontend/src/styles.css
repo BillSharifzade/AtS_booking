@@ -610,6 +610,33 @@ tr:last-child td { border-bottom: none; }
 .badge.zone { background: var(--accent-soft); color: var(--accent-deep); text-transform: none; letter-spacing: 0.2px; }
 .badge.amber { color: var(--amber); background: var(--amber-soft); }
 .badge.coffee { background: var(--amber-soft); color: var(--amber); text-transform: none; letter-spacing: 0.2px; }
+.badge.vip {
+  background: var(--black); color: #fff;
+  letter-spacing: 0.6px;
+}
+
+/* ---------- Switch (toggle) ---------- */
+.switch { display: flex; align-items: flex-start; gap: 11px; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+.switch-track {
+  position: relative; flex: none;
+  width: 40px; height: 22px; margin-top: 1px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.22s var(--ease), box-shadow 0.22s var(--ease);
+}
+.switch-track::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; box-shadow: var(--shadow-sm);
+  transition: transform 0.24s var(--ease);
+}
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track::after { transform: translateX(18px); }
+.switch input:focus-visible + .switch-track { box-shadow: 0 0 0 3px var(--accent-ring); }
+.switch input:disabled + .switch-track { opacity: 0.5; }
+.switch-label { line-height: 1.35; }
+.switch-label .switch-hint { display: block; margin-top: 2px; font-size: 13px; color: var(--muted); }
 
 /* ---------- UserName + eye reveal ---------- */
 .username { display: inline-flex; align-items: center; gap: 7px; }

@@ -196,7 +196,6 @@ async def create_booking_endpoint(
             coffee_break=payload.coffee_break,
             coffee_headcount=payload.coffee_headcount,
             coffee_type=payload.coffee_type,
-            coffee_other=payload.coffee_other,
             foreign_guests=payload.foreign_guests,
             urgent=payload.is_urgent,
             room_struct=payload.room_struct,
