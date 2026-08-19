@@ -153,6 +153,10 @@ textarea { resize: vertical; min-height: 60px; }
 }
 .seg-btn:active { transform: scale(0.98); }
 .seg-btn.on { background: var(--accent-grad); color: #fff; box-shadow: 0 3px 10px var(--accent-ring); }
+/* Optional second line: what the choice actually contains, greyed out under the name. */
+.seg-btn-title { display: block; }
+.seg-btn-sub { display: block; margin-top: 3px; font-size: 11.5px; font-weight: 550; line-height: 1.3; color: var(--muted-2); }
+.seg-btn.on .seg-btn-sub { color: rgba(255, 255, 255, 0.8); }
 
 /* ---- Pick list ---- */
 .pick-list { display: flex; flex-direction: column; gap: 9px; }

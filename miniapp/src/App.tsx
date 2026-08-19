@@ -473,15 +473,16 @@ function Wizard({ boot, onDone }: { boot: Bootstrap; onDone: () => void }) {
               <Field label="Кол-во кофе-брейков"><input inputMode="numeric" value={form.coffee_headcount} onChange={(e) => set({ coffee_headcount: e.target.value })} /></Field>
               <Field label="Что нужно">
                 {selectedRoom?.is_vip ? (
-                  <>
-                    <div className="seg">
-                      <button type="button" className={`seg-btn ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>Стандартный</button>
-                      <button type="button" className={`seg-btn ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>{COFFEE_OTHER_VIP}</button>
-                    </div>
-                    <p className="field-note">
-                      {form.coffee_type === "standard" ? "Печенье, кофе, чай, конфеты." : `${COFFEE_OTHER_VIP}.`}
-                    </p>
-                  </>
+                  <div className="seg">
+                    <button type="button" className={`seg-btn ${form.coffee_type === "standard" ? "on" : ""}`} onClick={() => { set({ coffee_type: "standard" }); haptic(); }}>
+                      <span className="seg-btn-title">Стандартный</span>
+                      <span className="seg-btn-sub">Печенье, кофе, чай, конфеты</span>
+                    </button>
+                    <button type="button" className={`seg-btn ${form.coffee_type === "other" ? "on" : ""}`} onClick={() => { set({ coffee_type: "other" }); haptic(); }}>
+                      <span className="seg-btn-title">Другое</span>
+                      <span className="seg-btn-sub">{COFFEE_OTHER_VIP}</span>
+                    </button>
+                  </div>
                 ) : (
                   <p className="field-note">
                     Стандартный: печенье, кофе, чай, конфеты. Другой состав доступен только в VIP-аудиториях.
